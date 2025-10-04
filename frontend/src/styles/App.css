@@ -1,0 +1,109 @@
+.app-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 16px 64px;
+  gap: 24px;
+  text-align: center;
+}
+
+.app-wrapper h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 2.5vw, 2.5rem);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.hud {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+  font-size: 0.7rem;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 420px;
+  font-size: 0.65rem;
+  line-height: 1.6;
+  text-align: left;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.controls strong {
+  color: #ffd166;
+}
+
+.status-banner {
+  background: rgba(76, 187, 116, 0.2);
+  border: 1px solid rgba(76, 187, 116, 0.5);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 0.7rem;
+}
+
+button.primary {
+  background: #ffd166;
+  color: #1f1f1f;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+button.primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+button.primary:not(:disabled):hover,
+button.primary:not(:disabled):focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 28px rgba(0, 0, 0, 0.35);
+}
+
+.footer-note {
+  font-size: 0.55rem;
+  opacity: 0.75;
+}
+
+.level-select {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.level-select select {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.4);
+  color: inherit;
+  font-size: 0.7rem;
+}
+
+.level-select button {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.4);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.7rem;
+}
+
+.level-select button:hover,
+.level-select button:focus-visible {
+  background: rgba(0, 0, 0, 0.55);
+}

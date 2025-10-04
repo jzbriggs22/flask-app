@@ -1,0 +1,7 @@
+# Node / Vite
+frontend/node_modules
+frontend/dist
+
+# Editor metadata
+*.log
+.DS_Store
