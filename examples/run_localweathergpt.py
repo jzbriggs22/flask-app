@@ -3,9 +3,14 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 
-from localweathergpt import get_weather_data
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from localweathergpt import WeatherSource, get_weather_data
 
 
 def main() -> None:
@@ -34,6 +39,12 @@ def main() -> None:
         action="store_true",
         help="Ask for API keys at runtime when environment variables are missing",
     )
+    parser.add_argument(
+        "--providers",
+        nargs="+",
+        choices=[source.value for source in WeatherSource],
+        help="Optional subset of providers to query (default: all)",
+    )
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
@@ -47,6 +58,7 @@ def main() -> None:
         output_dir=str(output_dir),
         export_csv=args.export_csv,
         prompt_for_api_keys=args.prompt_api_keys,
+        providers=args.providers,
     )
 
     print(f"Combined rows: {len(result.combined):,}")

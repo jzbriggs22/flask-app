@@ -104,6 +104,31 @@ class WeatherDataError(RuntimeError):
     """Raised when weather data cannot be fetched or processed."""
 
 
+def normalize_providers(
+    providers: Optional[Iterable[str | WeatherSource]],
+) -> list[WeatherSource]:
+    """Coerce provider inputs into a list of WeatherSource enums."""
+
+    if not providers:
+        return list(WeatherSource)
+
+    normalized: list[WeatherSource] = []
+    for provider in providers:
+        if isinstance(provider, WeatherSource):
+            normalized.append(provider)
+            continue
+
+        try:
+            normalized.append(WeatherSource(provider))
+        except ValueError as exc:
+            valid = ", ".join(source.value for source in WeatherSource)
+            raise WeatherDataError(
+                f"Unsupported provider '{provider}'. Choose from: {valid}."
+            ) from exc
+
+    return normalized
+
+
 @dataclass
 class Location:
     """Physical location resolved via geocoding."""
@@ -143,6 +168,17 @@ def geocode_location(location: str) -> Location:
 
     Falls back to Buchanan, MI when geocoding fails to keep the pipeline running.
     """
+
+    parts = [segment.strip() for segment in location.split(",")]
+    if len(parts) == 2:
+        try:
+            latitude = float(parts[0])
+            longitude = float(parts[1])
+        except ValueError:
+            pass
+        else:
+            if -90 <= latitude <= 90 and -180 <= longitude <= 180:
+                return Location(name=location, latitude=latitude, longitude=longitude)
 
     geolocator = Nominatim(user_agent=GEOCODER_USER_AGENT)
 
@@ -185,17 +221,20 @@ def _prompt_secret(label: str) -> str:
 def prompt_for_missing_credentials(
     visual_crossing_key: Optional[str],
     noaa_token: Optional[str],
+    *,
+    prompt_visual_crossing: bool = True,
+    prompt_noaa: bool = True,
 ) -> tuple[Optional[str], Optional[str]]:
     """Request API credentials from the user when they are absent."""
 
     visual_crossing_key = _normalize_secret(visual_crossing_key)
     noaa_token = _normalize_secret(noaa_token)
 
-    if not visual_crossing_key:
+    if prompt_visual_crossing and not visual_crossing_key:
         entered = _prompt_secret("Enter Visual Crossing API key (leave blank to skip): ")
         visual_crossing_key = _normalize_secret(entered)
 
-    if not noaa_token:
+    if prompt_noaa and not noaa_token:
         entered = _prompt_secret("Enter NOAA CDO token (leave blank to skip): ")
         noaa_token = _normalize_secret(entered)
 
@@ -723,6 +762,8 @@ def fetch_all_sources(
     visual_crossing_key: Optional[str],
     noaa_token: Optional[str],
     noaa_station_id: Optional[str],
+    *,
+    providers: Iterable[WeatherSource],
 ) -> Dict[str, pd.DataFrame]:
     """Fetch and standardize data from all configured providers."""
 
@@ -730,27 +771,39 @@ def fetch_all_sources(
     if start_dt > end_dt:
         raise ValueError("start date must be on or before end date")
 
+    provider_set = set(providers)
     datasets: Dict[str, pd.DataFrame] = {}
 
-    meteostat_raw = fetch_meteostat_daily(location, start_dt, end_dt, cache_dir)
-    datasets[WeatherSource.METEOSTAT.value] = standardize_meteostat(meteostat_raw)
+    if WeatherSource.METEOSTAT in provider_set:
+        meteostat_raw = fetch_meteostat_daily(location, start_dt, end_dt, cache_dir)
+        datasets[WeatherSource.METEOSTAT.value] = standardize_meteostat(meteostat_raw)
 
-    datasets[WeatherSource.OPEN_METEO.value] = fetch_open_meteo_daily(location, start_dt, end_dt)
+    if WeatherSource.OPEN_METEO in provider_set:
+        datasets[WeatherSource.OPEN_METEO.value] = fetch_open_meteo_daily(
+            location, start_dt, end_dt
+        )
 
-    datasets[WeatherSource.VISUAL_CROSSING.value] = fetch_visual_crossing_daily(
-        location,
-        start_dt,
-        end_dt,
-        api_key=visual_crossing_key or "",
-    )
+    if WeatherSource.VISUAL_CROSSING in provider_set:
+        datasets[WeatherSource.VISUAL_CROSSING.value] = fetch_visual_crossing_daily(
+            location,
+            start_dt,
+            end_dt,
+            api_key=visual_crossing_key or "",
+        )
 
-    datasets[WeatherSource.NOAA.value] = fetch_noaa_daily(
-        location,
-        start_dt,
-        end_dt,
-        token=noaa_token or "",
-        station_id=noaa_station_id,
-    )
+    if WeatherSource.NOAA in provider_set:
+        datasets[WeatherSource.NOAA.value] = fetch_noaa_daily(
+            location,
+            start_dt,
+            end_dt,
+            token=noaa_token or "",
+            station_id=noaa_station_id,
+        )
+
+    if not datasets:
+        raise WeatherDataError(
+            "No datasets fetched. Confirm provider selections and credential configuration."
+        )
 
     for key, df in datasets.items():
         df.sort_values("Date", inplace=True)
@@ -1121,10 +1174,13 @@ def get_weather_data(
     prompt_for_api_keys: bool = False,
     require_visual_crossing_key: bool = False,
     require_noaa_token: bool = False,
+    providers: Optional[Iterable[str | WeatherSource]] = None,
 ) -> LocalWeatherGPTResult:
     """Run the LocalWeatherGPT pipeline and return consolidated analytics.
 
-    Parameters align with CLI flags and allow overriding API credentials.
+    Parameters align with CLI flags and allow overriding API credentials. Pass
+    `providers` to restrict which upstream services are queried when credentials
+    are unavailable or to shorten execution time.
     """
 
     cache_dir = cache_dir or os.getenv("METEOSTAT_CACHE_DIR")
@@ -1132,18 +1188,39 @@ def get_weather_data(
     noaa_token = noaa_token or NOAA_TOKEN
     noaa_station_id = noaa_station_id or NOAA_STATION_ID
 
-    if prompt_for_api_keys:
+    active_providers = normalize_providers(providers)
+    include_visual_crossing = WeatherSource.VISUAL_CROSSING in active_providers
+    include_noaa = WeatherSource.NOAA in active_providers
+
+    if prompt_for_api_keys and (include_visual_crossing or include_noaa):
         visual_crossing_key, noaa_token = prompt_for_missing_credentials(
             visual_crossing_key,
             noaa_token,
+            prompt_visual_crossing=include_visual_crossing,
+            prompt_noaa=include_noaa,
         )
 
     visual_crossing_key, noaa_token = ensure_api_credentials(
         visual_crossing_key,
         noaa_token,
-        require_visual_crossing=require_visual_crossing_key,
-        require_noaa=require_noaa_token,
+        require_visual_crossing=include_visual_crossing and require_visual_crossing_key,
+        require_noaa=include_noaa and require_noaa_token,
     )
+
+    if include_visual_crossing and not visual_crossing_key:
+        logging.info("Skipping Visual Crossing provider: no API key supplied.")
+        active_providers = [p for p in active_providers if p != WeatherSource.VISUAL_CROSSING]
+        include_visual_crossing = False
+
+    if include_noaa and not noaa_token:
+        logging.info("Skipping NOAA provider: no API token supplied.")
+        active_providers = [p for p in active_providers if p != WeatherSource.NOAA]
+        include_noaa = False
+
+    if not active_providers:
+        raise WeatherDataError(
+            "No providers selected. Supply at least one provider or provide the necessary API credentials."
+        )
 
     resolved_location = geocode_location(location)
     datasets = fetch_all_sources(
@@ -1154,6 +1231,7 @@ def get_weather_data(
         visual_crossing_key,
         noaa_token,
         noaa_station_id,
+        providers=active_providers,
     )
 
     combined = pd.concat(datasets.values(), ignore_index=True)
@@ -1265,6 +1343,12 @@ def _cli(argv: Optional[Iterable[str]] = None) -> None:
         action="store_true",
         help="Fail if a NOAA CDO token is not provided",
     )
+    parser_.add_argument(
+        "--providers",
+        nargs="+",
+        choices=[source.value for source in WeatherSource],
+        help="Optional subset of providers to query (default: all)",
+    )
 
     args = parser_.parse_args(argv)
 
@@ -1284,17 +1368,18 @@ def _cli(argv: Optional[Iterable[str]] = None) -> None:
             prompt_for_api_keys=args.prompt_api_keys,
             require_visual_crossing_key=args.require_visual_crossing_key,
             require_noaa_token=args.require_noaa_token,
+            providers=args.providers,
         )
     except WeatherDataError as exc:
         parser_.error(str(exc))
     else:
         print(f"LocalWeatherGPT finished processing {args.location}.")
         print("Data sources:")
-        for name, url in DATA_SOURCES.items():
-            print(f"  - {name}: {url}")
-        print(f"Total rows fetched: {len(result.combined):,}")
         for source, frame in result.by_source.items():
-            print(f"  {source}: {len(frame):,} rows")
+            url = DATA_SOURCES.get(source, "")
+            suffix = f" ({url})" if url else ""
+            print(f"  - {source}{suffix}: {len(frame):,} rows")
+        print(f"Total rows fetched: {len(result.combined):,}")
         print(f"Charts saved to {args.output_dir}")
         print("Crop recommendations:")
         print(result.crop_recommendations)

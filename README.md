@@ -61,7 +61,7 @@ python localweathergpt.py \
 
 Key flags:
 
-- `--location`: `"City, State"`, ZIP code, or coordinates.
+- `--location`: `"City, State"`, ZIP code, or `"latitude,longitude"` (the latter skips geocoding).
 - `--start` / `--end`: ISO date strings.
 - `--base-temp`: GDD base temperature (°F). Default 50°F.
 - `--output-dir`: Directory for saved charts.
@@ -71,6 +71,7 @@ Key flags:
 - `--visual-crossing-key`: Override `VISUAL_CROSSING_API_KEY`.
 - `--noaa-token`: Override `NOAA_TOKEN`.
 - `--noaa-station`: Force a specific NOAA station ID if the auto-selected option is unsuitable.
+- `--providers`: Limit downloads to specific sources (e.g., `--providers "Meteostat" "Open-Meteo"`)—helpful when you lack paid API keys.
 - `--prompt-api-keys`: Interactively request missing Visual Crossing/NOAA credentials (useful when running from a prompt or REPL).
 - `--require-visual-crossing-key` / `--require-noaa-token`: Fail-fast unless the corresponding credential is supplied—handy when exposing LocalWeatherGPT inside public chat prompts to prevent anonymous abuse.
 
@@ -82,7 +83,7 @@ python examples/run_localweathergpt.py "Buchanan, MI" 1995-01-01 2024-12-31 \
   --export-csv artifacts/weather/buchanan.csv
 ```
 
-Add `--prompt-api-keys` if you want the script to ask for the Visual Crossing/NOAA credentials at runtime.
+Add `--prompt-api-keys` if you want the script to ask for the Visual Crossing/NOAA credentials at runtime. Supply `--providers "Meteostat" "Open-Meteo"` for a credential-free run that only uses public data sources.
 
 ### Calling from ChatGPT or Other Prompt Runtimes
 
