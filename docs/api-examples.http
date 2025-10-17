@@ -1,0 +1,35 @@
+### Create a user
+# @name CreateUser
+POST http://localhost:8000/users
+X-API-Key: YOUR_API_KEY
+X-Timestamp: {{timestamp}}
+X-Signature: {{signature}}
+Content-Type: application/json
+
+{
+  "name": "Agent Smith",
+  "email": "agent.smith@example.com"
+}
+
+### List tasks for a project
+# @name ListTasks
+GET http://localhost:8000/tasks?project=PROJECT_ALPHA
+X-API-Key: YOUR_API_KEY
+
+### Bulk update task statuses
+# @name BulkUpdateTasks
+POST http://localhost:8000/tasks/bulk-update
+X-API-Key: YOUR_API_KEY
+Content-Type: application/json
+
+{
+  "updates": [
+    {"task_id": "TASK_001", "status": "complete"},
+    {"task_id": "TASK_002", "status": "in_progress"}
+  ]
+}
+
+### Fetch metrics with dedicated credential
+# @name Metrics
+GET http://localhost:8000/metrics
+X-Metrics-Key: YOUR_METRICS_KEY
