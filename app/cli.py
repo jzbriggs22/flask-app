@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from .audit import audit_event
 from .database import get_session_factory, init_engine
-from .models import ApiKey
+from .models import ApiKey, ApiKeyArchive
 from .security import hash_api_key
 from .vault import store_api_key_secret
 
@@ -248,6 +248,56 @@ def reassign_api_key_owner(
     for name in reassigned:
         typer.echo(f"Reassigned '{name}' to {owner_email}.")
         audit_event("api_key_owner_reassigned", api_key_name=name, owner_email=owner_email)
+
+
+@app.command("describe-api-key")
+def describe_api_key(name: str = typer.Argument(..., help="Name of the API key.")) -> None:
+    """Print analytics and archive history for a specific API key."""
+
+    init_engine()
+    SessionLocal = get_session_factory()
+
+    with SessionLocal() as session:
+        record = session.execute(select(ApiKey).where(ApiKey.name == name)).scalar_one_or_none()
+        if not record:
+            typer.echo(f"No API key found for '{name}'.", err=True)
+            raise typer.Exit(code=1)
+
+        typer.echo(f"Name: {record.name}")
+        typer.echo(f"Owner: {record.owner_email or '-'}")
+        typer.echo(f"Description: {record.description or '-'}")
+        typer.echo(f"Scopes: {','.join(record.scopes or [])}")
+        typer.echo(f"Status: {'active' if record.is_active else 'inactive'}")
+        typer.echo(f"Created: {record.created_at.isoformat()}")
+        typer.echo(f"Last used: {record.last_used_at.isoformat() if record.last_used_at else '-'}")
+        typer.echo(f"Expires: {record.expires_at.isoformat() if record.expires_at else 'never'}")
+        typer.echo(f"Requests: {record.request_count}")
+        typer.echo(f"Errors: {record.error_count}")
+        if record.last_error_reason:
+            typer.echo(
+                f"Last error: {record.last_error_reason} at "
+                f"{record.last_error_at.isoformat() if record.last_error_at else '-'}"
+            )
+
+        archives = (
+            session.execute(
+                select(ApiKeyArchive)
+                .where(ApiKeyArchive.name == name)
+                .order_by(ApiKeyArchive.archived_at.desc())
+            )
+            .scalars()
+            .all()
+        )
+
+        if archives:
+            typer.echo("Archive history:")
+            for archive in archives:
+                typer.echo(
+                    f"  - {archive.archived_at.isoformat()} reason={archive.archive_reason or '-'} "
+                    f"requests={archive.request_count} errors={archive.error_count}"
+                )
+        else:
+            typer.echo("Archive history: none")
 
 
 def main() -> None:

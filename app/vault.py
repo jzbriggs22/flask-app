@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
-from typing import Any
+from typing import Any, Dict
 
 from .config import get_settings
 
@@ -38,6 +40,31 @@ def _build_client(settings):  # pragma: no cover - trivial wrapper
     return client
 
 
+def _encode_for_transit(value: Any) -> str:
+    raw = json.dumps(value)
+    return base64.b64encode(raw.encode("utf-8")).decode("utf-8")
+
+
+def _encrypt_metadata(client, settings, metadata: Dict[str, Any]) -> dict[str, str]:  # pragma: no cover - runtime
+    encrypted: dict[str, str] = {}
+    for key, value in metadata.items():
+        if value is None:
+            continue
+        kwargs = {
+            "mount_point": settings.vault_mount_point,
+            "name": settings.vault_transit_key,
+            "plaintext": _encode_for_transit(value),
+        }
+        if settings.vault_transit_key_version:
+            kwargs["key_version"] = settings.vault_transit_key_version
+        response = client.secrets.transit.encrypt_data(**kwargs)
+        ciphertext = response.get("data", {}).get("ciphertext")
+        if not ciphertext:
+            raise RuntimeError("Vault transit encryption failed to return ciphertext")
+        encrypted[f"meta_{key}"] = ciphertext
+    return encrypted
+
+
 def store_api_key_secret(name: str, plaintext: str, metadata: dict[str, Any] | None = None) -> bool:
     """Persist the generated API key secret to Vault when configured."""
 
@@ -54,8 +81,20 @@ def store_api_key_secret(name: str, plaintext: str, metadata: dict[str, Any] | N
 
     secret_path = f"{settings.vault_path_prefix.rstrip('/')}/{name}"
     payload = {"api_key": plaintext}
+    metadata = metadata or {}
     if metadata:
-        payload.update({f"meta_{key}": value for key, value in metadata.items() if value is not None})
+        if settings.vault_transit_key:
+            try:
+                payload.update(_encrypt_metadata(client, settings, metadata))
+            except Exception as exc:  # pragma: no cover - depends on vault runtime
+                logger.error(
+                    "vault_transit_encryption_failed",
+                    extra={"path": secret_path, "error": str(exc)},
+                )
+                # Fall back to plaintext metadata for resilience
+                payload.update({f"meta_{key}": value for key, value in metadata.items() if value is not None})
+        else:
+            payload.update({f"meta_{key}": value for key, value in metadata.items() if value is not None})
 
     try:
         client.secrets.kv.v2.create_or_update_secret(
@@ -64,6 +103,17 @@ def store_api_key_secret(name: str, plaintext: str, metadata: dict[str, Any] | N
             secret=payload,
         )
         logger.info("vault_secret_stored", extra={"path": secret_path})
+        if settings.vault_verify_writes:
+            stored = client.secrets.kv.v2.read_secret_version(
+                mount_point=settings.vault_mount_point,
+                path=secret_path,
+            )
+            remote_payload = stored.get("data", {}).get("data", {})
+            if remote_payload.get("api_key") != plaintext:
+                logger.error(
+                    "vault_secret_verification_failed", extra={"path": secret_path}
+                )
+                return False
         return True
     except Exception as exc:  # pragma: no cover - network errors
         logger.error(

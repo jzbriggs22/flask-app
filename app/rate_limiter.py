@@ -80,27 +80,46 @@ class RedisSlidingWindowRateLimiter:
         self.window_seconds = window_seconds
         self.burst = burst
         self.key_prefix = key_prefix
+        window_ms = int(window_seconds * 1000)
+        expire_seconds = int(window_seconds) + 1
+        self._script = self.client.register_script(
+            """
+            local sorted_key = KEYS[1]
+            local counter_key = KEYS[2]
+            local now_ms = tonumber(ARGV[1])
+            local window_ms = tonumber(ARGV[2])
+            local limit = tonumber(ARGV[3])
+            local burst = tonumber(ARGV[4])
+            local expire_seconds = tonumber(ARGV[5])
+            redis.call('ZREMRANGEBYSCORE', sorted_key, 0, now_ms - window_ms)
+            local current = redis.call('ZCARD', sorted_key)
+            if current >= limit + burst then
+                return {0, current}
+            end
+            redis.call('ZADD', sorted_key, now_ms, tostring(now_ms))
+            redis.call('EXPIRE', sorted_key, expire_seconds)
+            local updated = redis.call('ZCARD', sorted_key)
+            redis.call('INCR', counter_key)
+            redis.call('EXPIRE', counter_key, expire_seconds)
+            return {1, updated}
+            """
+        )
+        self._window_ms = window_ms
+        self._expire_seconds = expire_seconds
 
-    def _full_key(self, key: str) -> str:
+    def _sorted_key(self, key: str) -> str:
         return f"{self.key_prefix}:{key}"
+
+    def _counter_key(self, key: str) -> str:
+        return f"{self.key_prefix}:count:{key}"
 
     def allow(self, key: str) -> bool:
         now_ms = int(time.time() * 1000)
-        window_start = now_ms - int(self.window_seconds * 1000)
-        redis_key = self._full_key(key)
-
-        pipe = self.client.pipeline()
-        pipe.zremrangebyscore(redis_key, 0, window_start)
-        pipe.zcard(redis_key)
-        pipe.expire(redis_key, int(self.window_seconds) + 1)
-        removed, count, _ = pipe.execute()
-
-        if count >= self.limit + self.burst:
-            return False
-
-        self.client.zadd(redis_key, {str(now_ms): now_ms})
-        self.client.expire(redis_key, int(self.window_seconds) + 1)
-        return True
+        success, _ = self._script(
+            keys=[self._sorted_key(key), self._counter_key(key)],
+            args=[now_ms, self._window_ms, self.limit, self.burst, self._expire_seconds],
+        )
+        return bool(success)
 
     def reset(self) -> None:
         pattern = f"{self.key_prefix}:*"

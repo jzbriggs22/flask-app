@@ -124,6 +124,17 @@ class TaskBulkUpdateRequest(BaseModel):
     updates: list[TaskBulkUpdateItem]
 
 
+class PaginationMeta(BaseModel):
+    total: int = Field(..., ge=0)
+    page: int = Field(..., ge=1)
+    page_size: int = Field(..., ge=1)
+
+
+class TaskPage(BaseModel):
+    items: list[TaskRead]
+    meta: PaginationMeta
+
+
 class Message(BaseModel):
     detail: str
 
@@ -304,3 +315,37 @@ class MemoryTraceRead(MemoryTraceBase):
 
     class Config:
         orm_mode = True
+
+
+class ApiKeyAnalytics(BaseModel):
+    name: str
+    owner_email: str | None
+    description: str | None
+    scopes: list[str]
+    is_active: bool
+    request_count: int
+    error_count: int
+    last_used_at: datetime | None
+    last_error_at: datetime | None
+    last_error_reason: str | None
+    expires_at: datetime | None
+
+
+class ApiKeyArchiveRead(BaseModel):
+    name: str
+    owner_email: str | None
+    scopes: list[str]
+    expires_at: datetime | None
+    archived_at: datetime
+    archive_reason: str | None
+    last_error_reason: str | None
+    request_count: int
+    error_count: int
+
+    class Config:
+        orm_mode = True
+
+
+class ApiKeyArchivePage(BaseModel):
+    items: list[ApiKeyArchiveRead]
+    meta: PaginationMeta

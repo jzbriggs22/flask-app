@@ -16,8 +16,11 @@ A FastAPI-powered service that stores explicit task and user state so agents can
 - Structured audit logging with isolated sink configuration for Cloud/SIEM forwarding.
 - Request analytics per API key, including request/error counters and last error tracking.
 - Metrics caching with per-status gauges to keep Prometheus scrapes lightweight.
+- Per-endpoint metrics caching overrides with optional `refresh` query bypass for scrapes that require fresh data.
 - CORS enabled for local experimentation with external agent clients.
 - Pytest coverage for the main task, memory, and user behaviours.
+- Memory audit queue with Kafka-ready backend or in-memory buffer for downstream ingestion.
+- Admin analytics endpoints for API key usage plus paginated archive listings.
 
 ## Quick start
 
@@ -60,6 +63,8 @@ A FastAPI-powered service that stores explicit task and user state so agents can
    | `METRICS_KEY` | _(empty)_ | Shared secret enabling `/metrics` access without monitor scope. |
    | `METRICS_KEY_HEADER` | `X-Metrics-Key` | Header that must carry the metrics credential. |
    | `METRICS_CACHE_SECONDS` | `15` | TTL for cached `/metrics` responses (`0` disables caching). |
+   | `METRICS_CACHE_OVERRIDES` | _(empty)_ | Optional JSON dict mapping endpoints (e.g. `{"/metrics":5}`) to per-endpoint cache TTLs. |
+   | `METRICS_CACHE_BYPASS_QUERY` | `refresh` | Query parameter name that forces cache bypass when present with a truthy value. |
    | `VAULT_ENABLED` | `false` | Persist new API keys to HashiCorp Vault when true. |
    | `VAULT_ADDR` | `http://127.0.0.1:8200` | Vault server address. |
    | `VAULT_TOKEN` | _(empty)_ | Vault token used for write access. |
@@ -67,10 +72,18 @@ A FastAPI-powered service that stores explicit task and user state so agents can
    | `VAULT_MOUNT_POINT` | `secret` | KV v2 mount used for API key storage. |
    | `VAULT_PATH_PREFIX` | `task-registry/api-keys` | Prefix for secrets written to Vault. |
    | `VAULT_VERIFY_SSL` | `true` | Toggle TLS verification when talking to Vault. |
+   | `VAULT_VERIFY_WRITES` | `false` | Re-read secrets after write to ensure the payload matches. |
+   | `VAULT_TRANSIT_KEY` | _(empty)_ | Optional transit key used to encrypt metadata before writing. |
+   | `VAULT_TRANSIT_KEY_VERSION` | _(empty)_ | Specific transit key version to use when encrypting metadata. |
    | `AUDIT_LOG_ENABLED` | `true` | Enable structured audit logging. |
    | `AUDIT_LOG_DESTINATION` | `stdout` | Audit sink (`stdout`, `file`, or `http`). |
    | `AUDIT_LOG_FILE_PATH` | _(empty)_ | File path when using file-based audit logging. |
    | `AUDIT_LOG_HTTP_ENDPOINT` | _(empty)_ | HTTP endpoint for forwarding audit events (e.g., Splunk HEC). |
+   | `AUDIT_QUEUE_ENABLED` | `false` | Enable async audit queue fan-out (memory or Kafka). |
+   | `AUDIT_QUEUE_BACKEND` | `memory` | Backend for audit queue (`memory` or `kafka`). |
+   | `AUDIT_QUEUE_KAFKA_BOOTSTRAP` | _(empty)_ | Kafka bootstrap servers when using the Kafka backend. |
+   | `AUDIT_QUEUE_KAFKA_TOPIC` | _(empty)_ | Kafka topic name for audit events. |
+   | `AUDIT_QUEUE_MEMORY_MAXSIZE` | `10000` | Maximum events retained by the in-memory audit queue before dropping oldest. |
 
 3. **Provision an API key**
 
@@ -124,6 +137,8 @@ A FastAPI-powered service that stores explicit task and user state so agents can
 | GET    | `/memory/graph`         | Export a focused subgraph for a node or task        |
 | GET    | `/tasks/{task}/timeline`| Retrieve chronological trace history for a task     |
 | GET    | `/metrics`              | Prometheus metrics gated by monitor scope or metrics key |
+| GET    | `/admin/api-keys/analytics` | Aggregate API key usage metrics (monitor scope). |
+| GET    | `/admin/api-keys/archives`  | Paginated archive history for rotated/expired keys. |
 
 ## Operational notes
 
@@ -135,7 +150,7 @@ A FastAPI-powered service that stores explicit task and user state so agents can
 - Enable Vault integration to push generated secrets directly into your organisation's secrets manager during CLI create/rotate commands.
 - Audit events are emitted via the `app.audit` logger; point `AUDIT_LOG_DESTINATION` at a file or HTTP collector (e.g., Splunk HEC) to ship them off-box.
 - API keys now track total requests, error counts, and the most recent error reason for quicker incident response.
-- Cache `/metrics` responses by default; set `METRICS_CACHE_SECONDS=0` if you prefer uncached scrapes during development.
+- Cache `/metrics` responses by default; set `METRICS_CACHE_SECONDS=0` or call `/metrics?refresh=true` for uncached scrapes, and use `METRICS_CACHE_OVERRIDES` for per-endpoint TTL control.
 
 ## CLI quick reference
 
@@ -146,7 +161,13 @@ python -m app.cli deactivate-api-key prod-bot
 python -m app.cli rotate-api-key prod-bot --ttl-days 60
 python -m app.cli bulk-set-scopes prod-bot qa-bot --add monitor --remove write
 python -m app.cli reassign-api-key-owner prod-bot --owner-email security@example.com
+python -m app.cli describe-api-key prod-bot
 ```
+
+## Infrastructure snippets
+
+- [`docs/terraform/main.tf`](docs/terraform/main.tf) shows how to provision the service behind Gunicorn with environment variables supplied via Terraform.
+- [`docs/helm-values.yaml`](docs/helm-values.yaml) contains example Helm values for Kubernetes deployments, including secrets and config maps for Vault/audit credentials.
 
 ## Request signing
 

@@ -6,7 +6,7 @@ import asyncio
 import time
 from contextlib import asynccontextmanager, suppress
 
-from fastapi import Depends, FastAPI, Response
+from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from sqlalchemy import func, select
@@ -79,11 +79,24 @@ def create_app() -> FastAPI:
         "/metrics",
         dependencies=[Depends(optional_auth_dependency), Depends(metrics_dependency)],
     )
-    def metrics(session: Session = Depends(get_session)) -> Response:
+    def metrics(
+        request: Request,
+        cache_seconds: int | None = Query(default=None, ge=0, le=3600),
+        session: Session = Depends(get_session),
+    ) -> Response:
         """Expose Prometheus-style metrics for monitoring."""
 
         now = time.time()
-        cache_seconds = settings.metrics_cache_seconds
+        cache_query_flag = request.query_params.get(settings.metrics_cache_bypass_query)
+        bypass_cache = bool(
+            cache_query_flag and cache_query_flag.lower() in {"1", "true", "yes"}
+        )
+        if cache_seconds is None:
+            cache_seconds = settings.metrics_cache_overrides.get(
+                "/metrics", settings.metrics_cache_seconds
+            )
+        if bypass_cache:
+            cache_seconds = 0
         cache = app.state.metrics_cache
         if cache_seconds and cache.get("content") and cache.get("expires", 0.0) > now:
             return Response(content=cache["content"], media_type="text/plain")

@@ -25,13 +25,17 @@ def client(tmp_path):
     os.environ["METRICS_CACHE_SECONDS"] = "0"
     os.environ["RATE_LIMIT_BACKEND"] = "memory"
     os.environ["AUDIT_LOG_ENABLED"] = "false"
+    os.environ["AUDIT_QUEUE_ENABLED"] = "false"
+    os.environ.pop("METRICS_CACHE_OVERRIDES", None)
 
     from app import database
+    from app.audit_queue import reset_audit_queue_cache
     from app.config import reset_settings_cache
     from app.models import ApiKey
     from app.security import hash_api_key
 
     reset_settings_cache()
+    reset_audit_queue_cache()
     database.init_engine(str(os.environ["DATABASE_URL"]))
     from app import main
 

@@ -5,7 +5,9 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import List, Literal
 
-from pydantic import BaseSettings, Field
+from pydantic import BaseSettings, Field, validator
+
+import json
 
 
 class Settings(BaseSettings):
@@ -28,6 +30,8 @@ class Settings(BaseSettings):
     metrics_key: str | None = Field(default=None)
     metrics_key_header: str = Field(default="X-Metrics-Key")
     metrics_cache_seconds: int = Field(default=15, ge=0)
+    metrics_cache_overrides: dict[str, int] = Field(default_factory=dict)
+    metrics_cache_bypass_query: str = Field(default="refresh")
     api_key_default_ttl_days: int = Field(default=0, ge=0)
     api_key_expiry_check_seconds: int = Field(default=900, ge=60)
     api_key_auto_expiry_enabled: bool = Field(default=True)
@@ -38,14 +42,38 @@ class Settings(BaseSettings):
     vault_mount_point: str = Field(default="secret")
     vault_path_prefix: str = Field(default="task-registry/api-keys")
     vault_verify_ssl: bool = Field(default=True)
+    vault_verify_writes: bool = Field(default=False)
+    vault_transit_key: str | None = Field(default=None)
+    vault_transit_key_version: int | None = Field(default=None, ge=1)
     audit_log_enabled: bool = Field(default=True)
     audit_log_destination: Literal["stdout", "file", "http"] = Field(default="stdout")
     audit_log_file_path: str | None = Field(default=None)
     audit_log_http_endpoint: str | None = Field(default=None)
+    audit_queue_enabled: bool = Field(default=False)
+    audit_queue_backend: Literal["memory", "kafka"] = Field(default="memory")
+    audit_queue_kafka_bootstrap: str | None = Field(default=None)
+    audit_queue_kafka_topic: str | None = Field(default=None)
+    audit_queue_memory_maxsize: int = Field(default=10000, ge=0)
 
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+
+    @validator("metrics_cache_overrides", pre=True)
+    def _parse_metrics_overrides(cls, value):  # noqa: D401, ANN001
+        if not value:
+            return {}
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError as exc:  # pragma: no cover - defensive
+                raise ValueError("METRICS_CACHE_OVERRIDES must be valid JSON") from exc
+            if not isinstance(parsed, dict):
+                raise ValueError("METRICS_CACHE_OVERRIDES must decode to a dictionary")
+            return parsed
+        raise ValueError("Unsupported type for METRICS_CACHE_OVERRIDES")
 
 
 @lru_cache()

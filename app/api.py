@@ -4,14 +4,26 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import or_, select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from .database import get_session
-from .models import MemoryEdge, MemoryNode, MemoryTrace, TASK_STATUSES, Task, User
+from .models import (
+    ApiKey,
+    ApiKeyArchive,
+    MemoryEdge,
+    MemoryNode,
+    MemoryTrace,
+    TASK_STATUSES,
+    Task,
+    User,
+)
 from .schemas import (
+    ApiKeyAnalytics,
+    ApiKeyArchivePage,
+    ApiKeyArchiveRead,
     Message,
     MemoryEdgeCreate,
     MemoryEdgeRead,
@@ -24,6 +36,7 @@ from .schemas import (
     MemoryTraceRead,
     TaskBulkUpdateRequest,
     TaskRead,
+    TaskPage,
     TaskUpdate,
     UserCreate,
     UserRead,
@@ -67,6 +80,15 @@ def _ensure_owner_exists(session: Session, owner_id: int | None) -> None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Owner user does not exist.")
 
 
+def _require_scope(request: Request, scope: str) -> None:
+    scopes = getattr(request.state, "api_key_scopes", set())
+    if scope not in scopes and "all" not in scopes:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Scope '{scope}' is required for this endpoint.",
+        )
+
+
 def _get_task_by_ref(session: Session, task_ref: str) -> Task:
     task_ref = task_ref.upper()
     task = session.execute(select(Task).where(Task.task_id == task_ref)).scalar_one_or_none()
@@ -107,13 +129,15 @@ def create_task(task_in: TaskCreate, session: Session = Depends(get_session)) ->
     return TaskRead.from_orm(task)
 
 
-@router.get("/tasks", response_model=list[TaskRead])
+@router.get("/tasks", response_model=TaskPage)
 def list_tasks(
     status_filter: str | None = Query(default=None, alias="status"),
     project: str | None = None,
     owner_id: int | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
     session: Session = Depends(get_session),
-) -> list[TaskRead]:
+) -> TaskPage:
     query = select(Task)
 
     if status_filter:
@@ -125,8 +149,20 @@ def list_tasks(
     if owner_id is not None:
         query = query.where(Task.owner_id == owner_id)
 
-    tasks = session.execute(query.order_by(Task.created_at.asc())).scalars().all()
-    return [TaskRead.from_orm(task) for task in tasks]
+    total = session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
+    rows = (
+        session.execute(
+            query.order_by(Task.created_at.asc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        .scalars()
+        .all()
+    )
+    return TaskPage(
+        items=[TaskRead.from_orm(task) for task in rows],
+        meta={"total": total, "page": page, "page_size": page_size},
+    )
 
 
 @router.get("/tasks/{task_id}", response_model=TaskRead)
@@ -633,3 +669,54 @@ def bulk_update_tasks(
 
     refreshed = [TaskRead.from_orm(mapped_tasks[task_id]) for task_id in task_ids]
     return refreshed
+
+
+@router.get("/admin/api-keys/analytics", response_model=list[ApiKeyAnalytics])
+def list_api_key_analytics(
+    request: Request, session: Session = Depends(get_session)
+) -> list[ApiKeyAnalytics]:
+    _require_scope(request, "monitor")
+    records = (
+        session.execute(select(ApiKey).order_by(ApiKey.created_at.asc())).scalars().all()
+    )
+    return [
+        ApiKeyAnalytics(
+            name=record.name,
+            owner_email=record.owner_email,
+            description=record.description,
+            scopes=record.scopes or [],
+            is_active=record.is_active,
+            request_count=record.request_count,
+            error_count=record.error_count,
+            last_used_at=record.last_used_at,
+            last_error_at=record.last_error_at,
+            last_error_reason=record.last_error_reason,
+            expires_at=record.expires_at,
+        )
+        for record in records
+    ]
+
+
+@router.get("/admin/api-keys/archives", response_model=ApiKeyArchivePage)
+def list_api_key_archives(
+    request: Request,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    session: Session = Depends(get_session),
+) -> ApiKeyArchivePage:
+    _require_scope(request, "monitor")
+    query = select(ApiKeyArchive)
+    total = session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
+    rows = (
+        session.execute(
+            query.order_by(ApiKeyArchive.archived_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        .scalars()
+        .all()
+    )
+    return ApiKeyArchivePage(
+        items=[ApiKeyArchiveRead.from_orm(row) for row in rows],
+        meta={"total": total, "page": page, "page_size": page_size},
+    )

@@ -6,6 +6,7 @@ import secrets
 import time
 from datetime import datetime, timedelta
 from http import HTTPStatus
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,6 +16,13 @@ from app import database
 from app.config import reset_settings_cache
 from app.models import ApiKey, ApiKeyArchive
 from app.security import hash_api_key, purge_expired_api_keys
+
+
+def metric_value(content: str, metric: str) -> float:
+    for line in content.splitlines():
+        if line.startswith(metric + " "):
+            return float(line.split(" ")[1])
+    raise AssertionError(f"Metric {metric} not present")
 
 
 def test_missing_api_key_rejected(tmp_path):
@@ -94,6 +102,30 @@ def test_create_and_update_task(client):
     updated = update_response.json()
     assert updated["status"] == "in_progress"
     assert updated["dependencies"] == ["TASK_000"]
+
+
+def test_task_list_paginated(client):
+    for idx in range(1, 4):
+        client.post(
+            "/tasks",
+            json={
+                "task_id": f"task_page_{idx}",
+                "name": f"Task {idx}",
+                "project": "PAGE_TEST",
+            },
+        )
+
+    first_page = client.get("/tasks", params={"page_size": 2})
+    assert first_page.status_code == HTTPStatus.OK
+    payload = first_page.json()
+    assert payload["meta"]["page"] == 1
+    assert payload["meta"]["page_size"] == 2
+    assert payload["meta"]["total"] >= 3
+    assert len(payload["items"]) == 2
+
+    second_page = client.get("/tasks", params={"page": 2, "page_size": 2})
+    assert second_page.status_code == HTTPStatus.OK
+    assert len(second_page.json()["items"]) >= 1
 
 
 def test_bulk_update_requires_existing_tasks(client):
@@ -318,6 +350,61 @@ def test_scope_errors_increment_analytics(client):
         assert record.last_error_reason.startswith("missing_scope")
 
 
+def test_api_key_analytics_endpoint(client):
+    response = client.get("/admin/api-keys/analytics")
+    assert response.status_code == HTTPStatus.OK
+    payload = response.json()
+    assert any(item["name"] == "pytest-suite" for item in payload)
+
+
+def test_api_key_analytics_requires_monitor_scope(client):
+    raw_key = secrets.token_urlsafe(16)
+    SessionLocal = database.get_session_factory()
+    with SessionLocal() as session:
+        session.add(
+            ApiKey(
+                name="no-monitor",
+                key_hash=hash_api_key(raw_key),
+                scopes=["read"],
+                is_active=True,
+            )
+        )
+        session.commit()
+
+    response = client.get(
+        "/admin/api-keys/analytics",
+        headers={"X-API-Key": raw_key},
+    )
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+def test_api_key_archive_pagination(client):
+    SessionLocal = database.get_session_factory()
+    with SessionLocal() as session:
+        key = session.execute(select(ApiKey).where(ApiKey.name == "pytest-suite")).scalar_one()
+        session.add(
+            ApiKeyArchive(
+                api_key_id=key.id,
+                name=key.name,
+                owner_email=key.owner_email,
+                description=key.description,
+                scopes=key.scopes,
+                expires_at=key.expires_at,
+                archive_reason="rotation",
+                request_count=key.request_count,
+                error_count=key.error_count,
+            )
+        )
+        session.commit()
+
+    response = client.get("/admin/api-keys/archives", params={"page_size": 1})
+    assert response.status_code == HTTPStatus.OK
+    payload = response.json()
+    assert payload["meta"]["page_size"] == 1
+    assert payload["meta"]["total"] >= 1
+    assert payload["items"][0]["name"] == "pytest-suite"
+
+
 def test_metrics_requires_credential(client):
     # monitor scope key should be allowed
     response = client.get("/metrics")
@@ -507,12 +594,6 @@ def test_metrics_cache_respects_ttl(tmp_path):
         )
         session.commit()
 
-    def metric_value(content: str, metric: str) -> float:
-        for line in content.splitlines():
-            if line.startswith(metric + " "):
-                return float(line.split(" ")[1])
-        raise AssertionError(f"Metric {metric} not present")
-
     with TestClient(app) as metrics_client:
         metrics_client.headers.update({"X-API-Key": raw_key})
         first = metrics_client.get("/metrics")
@@ -527,12 +608,28 @@ def test_metrics_cache_respects_ttl(tmp_path):
         second = metrics_client.get("/metrics")
         assert metric_value(second.text, "task_registry_total_users") == first_users
 
-        app.state.metrics_cache["expires"] = time.time() - 1
-        third = metrics_client.get("/metrics")
-        assert metric_value(third.text, "task_registry_total_users") == first_users + 1
+        refreshed = metrics_client.get("/metrics", params={"refresh": "true"})
+        assert metric_value(refreshed.text, "task_registry_total_users") == first_users + 1
+
+        override = metrics_client.get("/metrics", params={"cache_seconds": 0})
+        assert metric_value(override.text, "task_registry_total_users") == first_users + 1
 
     os.environ["METRICS_CACHE_SECONDS"] = "0"
     reset_settings_cache()
+
+
+def test_metrics_cache_disabled_reflects_changes(client):
+    baseline = client.get("/metrics")
+    assert baseline.status_code == HTTPStatus.OK
+    base_tasks = metric_value(baseline.text, "task_registry_total_tasks")
+
+    client.post(
+        "/tasks",
+        json={"task_id": "cache_disabled", "name": "No cache"},
+    )
+
+    updated = client.get("/metrics")
+    assert metric_value(updated.text, "task_registry_total_tasks") == base_tasks + 1
 
 
 def test_openapi_includes_hmac_headers(tmp_path):
@@ -608,3 +705,78 @@ def test_vault_store_is_noop_when_disabled():
 
     reset_settings_cache()
     assert store_api_key_secret("noop", "secret", {"env": "test"}) is False
+
+
+def test_vault_store_with_verification_and_transit(monkeypatch):
+    from app import vault
+
+    os.environ["VAULT_ENABLED"] = "true"
+    os.environ["VAULT_ADDR"] = "http://127.0.0.1:8200"
+    os.environ["VAULT_TOKEN"] = "token"
+    os.environ["VAULT_MOUNT_POINT"] = "secret"
+    os.environ["VAULT_PATH_PREFIX"] = "tests"
+    os.environ["VAULT_VERIFY_WRITES"] = "true"
+    os.environ["VAULT_TRANSIT_KEY"] = "test-key"
+    reset_settings_cache()
+
+    class FakeTransit:
+        def __init__(self):
+            self.calls: list[dict] = []
+
+        def encrypt_data(self, **kwargs):
+            self.calls.append(kwargs)
+            return {"data": {"ciphertext": f"vault:{kwargs['plaintext']}"}}
+
+    class FakeKVV2:
+        def __init__(self):
+            self.secret: dict | None = None
+
+        def create_or_update_secret(self, **kwargs):
+            self.secret = kwargs["secret"]
+
+        def read_secret_version(self, **kwargs):
+            return {"data": {"data": self.secret or {}}}
+
+    transit = FakeTransit()
+    kv_v2 = FakeKVV2()
+    fake_client = SimpleNamespace(
+        secrets=SimpleNamespace(kv=SimpleNamespace(v2=kv_v2), transit=transit)
+    )
+
+    monkeypatch.setattr(vault, "_build_client", lambda settings: fake_client)
+
+    written = vault.store_api_key_secret(
+        "integration", "plaintext", {"owner_email": "ops@example.com"}
+    )
+    assert written is True
+    assert "meta_owner_email" in kv_v2.secret
+    assert kv_v2.secret["api_key"] == "plaintext"
+    assert transit.calls, "Transit encryption should be invoked"
+
+    os.environ["VAULT_ENABLED"] = "false"
+    os.environ.pop("VAULT_VERIFY_WRITES", None)
+    os.environ.pop("VAULT_TRANSIT_KEY", None)
+    reset_settings_cache()
+
+
+def test_audit_queue_memory_backend_records_events():
+    from app.audit import audit_event
+    from app.audit_queue import get_audit_queue, reset_audit_queue_cache
+
+    os.environ["AUDIT_LOG_ENABLED"] = "true"
+    os.environ["AUDIT_QUEUE_ENABLED"] = "true"
+    os.environ["AUDIT_QUEUE_BACKEND"] = "memory"
+    os.environ["AUDIT_QUEUE_MEMORY_MAXSIZE"] = "5"
+    reset_settings_cache()
+    reset_audit_queue_cache()
+
+    audit_event("queue_test", note="ok")
+    queue = get_audit_queue()
+    assert queue is not None
+    events = queue.drain()
+    assert any(event["event"] == "queue_test" for event in events)
+
+    os.environ["AUDIT_QUEUE_ENABLED"] = "false"
+    os.environ["AUDIT_LOG_ENABLED"] = "false"
+    reset_settings_cache()
+    reset_audit_queue_cache()

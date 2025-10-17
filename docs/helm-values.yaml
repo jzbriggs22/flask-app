@@ -1,0 +1,81 @@
+image:
+  repository: ghcr.io/example/task-registry
+  tag: latest
+  pullPolicy: IfNotPresent
+
+env:
+  DATABASE_URL: postgresql://task_registry:supersecret@postgres:5432/task_registry
+  API_AUTH_ENABLED: "true"
+  RATE_LIMIT_BACKEND: redis
+  RATE_LIMIT_REDIS_URL: redis://redis:6379/0
+  METRICS_KEY: ${METRICS_KEY}
+  METRICS_CACHE_SECONDS: "15"
+  METRICS_CACHE_BYPASS_QUERY: refresh
+  METRICS_CACHE_OVERRIDES: '{"/metrics":15}'
+  AUDIT_QUEUE_ENABLED: "false"
+  AUDIT_LOG_ENABLED: "true"
+  VAULT_ENABLED: "true"
+  VAULT_ADDR: https://vault.platform.local:8200
+  VAULT_TOKEN: ${VAULT_TOKEN}
+  VAULT_MOUNT_POINT: secret
+  VAULT_PATH_PREFIX: task-registry/api-keys
+  VAULT_VERIFY_WRITES: "true"
+  VAULT_TRANSIT_KEY: task-registry
+
+service:
+  type: ClusterIP
+  port: 8000
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 20m
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "Strict-Transport-Security: max-age=63072000; includeSubDomains; preload";
+  hosts:
+    - host: task-registry.internal.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: task-registry-tls
+      hosts:
+        - task-registry.internal.example.com
+
+extraVolumes:
+  - name: redis-ca
+    secret:
+      secretName: redis-ca
+
+extraVolumeMounts:
+  - name: redis-ca
+    mountPath: /etc/ssl/certs/redis-ca.pem
+    subPath: redis-ca.pem
+
+extraEnvFrom:
+  - secretRef:
+      name: task-registry-secrets
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: /metrics
+  prometheus.io/port: "8000"
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8000
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8000
