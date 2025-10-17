@@ -10,6 +10,12 @@ from pydantic import BaseModel, EmailStr, Field, root_validator, validator
 TaskStatus = Literal["pending", "in_progress", "complete", "blocked"]
 
 
+class PaginationMeta(BaseModel):
+    total: int = Field(..., ge=0)
+    page: int = Field(..., ge=1)
+    page_size: int = Field(..., ge=1)
+
+
 class UserBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
@@ -30,6 +36,11 @@ class UserRead(UserBase):
 
     class Config:
         orm_mode = True
+
+
+class UserPage(BaseModel):
+    items: list[UserRead]
+    meta: PaginationMeta
 
 
 class TaskBase(BaseModel):
@@ -124,12 +135,6 @@ class TaskBulkUpdateRequest(BaseModel):
     updates: list[TaskBulkUpdateItem]
 
 
-class PaginationMeta(BaseModel):
-    total: int = Field(..., ge=0)
-    page: int = Field(..., ge=1)
-    page_size: int = Field(..., ge=1)
-
-
 class TaskPage(BaseModel):
     items: list[TaskRead]
     meta: PaginationMeta
@@ -208,6 +213,11 @@ class MemoryNodeRead(MemoryNodeBase):
         orm_mode = True
 
 
+class MemoryNodePage(BaseModel):
+    items: list[MemoryNodeRead]
+    meta: PaginationMeta
+
+
 class MemoryEdgeBase(BaseModel):
     edge_id: str = Field(..., regex=EDGE_ID_PATTERN, max_length=64)
     relation: str = Field(..., min_length=1, max_length=80)
@@ -270,6 +280,11 @@ class MemoryEdgeRead(MemoryEdgeBase):
 
     class Config:
         orm_mode = True
+
+
+class MemoryEdgePage(BaseModel):
+    items: list[MemoryEdgeRead]
+    meta: PaginationMeta
 
 
 class MemoryGraphRead(BaseModel):
