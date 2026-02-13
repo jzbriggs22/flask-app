@@ -1,0 +1,79 @@
+:root {
+  --ti83-bg: #9cab8f;
+  --ti83-screen: #8d9b81;
+  --ti83-dark: #2f3a2e;
+  --ti83-mid: #4a5747;
+  --ti83-light: #b4c2a6;
+}
+
+.app {
+  min-height: 100vh;
+  margin: 0;
+  padding: 16px;
+  background: var(--ti83-bg);
+  color: var(--ti83-dark);
+  font-family: "VT323", "Courier New", Courier, monospace;
+}
+
+.app-shell {
+  margin: 0 auto;
+  max-width: 920px;
+  border: 1px solid var(--ti83-dark);
+  background: var(--ti83-screen);
+  padding: 8px;
+}
+
+.hud {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.hud-panel {
+  border: 1px solid var(--ti83-mid);
+  background: var(--ti83-light);
+  padding: 4px 6px;
+  line-height: 1.2;
+}
+
+.hud-label {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.hud-value {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+button,
+.btn {
+  border: 1px solid var(--ti83-dark);
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--ti83-light);
+  color: var(--ti83-dark);
+  padding: 4px 8px;
+  font: inherit;
+}
+
+button:hover,
+.btn:hover,
+button:focus-visible,
+.btn:focus-visible {
+  outline: 1px solid var(--ti83-dark);
+  outline-offset: 1px;
+  background: var(--ti83-bg);
+}
+
+@media (max-width: 640px) {
+  .app {
+    padding: 8px;
+  }
+
+  .app-shell {
+    padding: 6px;
+  }
+}

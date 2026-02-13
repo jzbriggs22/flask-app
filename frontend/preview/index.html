@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TI-83 Retro Board Preview</title>
+    <link rel="stylesheet" href="../src/styles/index.css" />
+    <link rel="stylesheet" href="../src/styles/App.css" />
+    <link rel="stylesheet" href="../src/styles/GameBoard.css" />
+    <style>
+      .preview-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 8px;
+      }
+      .preview-level {
+        border: 1px solid #4a5747;
+        padding: 6px;
+        background: #b4c2a6;
+      }
+      .preview-title {
+        margin: 0 0 4px;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="app-shell">
+        <header class="hud" aria-label="HUD">
+          <div class="hud-panel"><div class="hud-label">Level</div><div class="hud-value">3</div></div>
+          <div class="hud-panel"><div class="hud-label">Moves</div><div class="hud-value">042</div></div>
+          <div class="hud-panel"><div class="hud-label">Pushes</div><div class="hud-value">015</div></div>
+        </header>
+
+        <section class="preview-grid" aria-label="Level alignment preview">
+          <article class="preview-level">
+            <p class="preview-title">Level A</p>
+            <div class="game-board" role="img" aria-label="Level A board">
+              <div class="board-row">
+                <span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span>
+              </div>
+              <div class="board-row">
+                <span class="cell cell--wall"></span><span class="cell cell--floor"><span class="hero"></span></span><span class="cell cell--floor"></span><span class="cell cell--goal"></span><span class="cell cell--floor"><span class="block"></span></span><span class="cell cell--wall"></span>
+              </div>
+              <div class="board-row">
+                <span class="cell cell--wall"></span><span class="cell cell--floor"></span><span class="cell cell--floor"></span><span class="cell cell--floor"></span><span class="cell cell--floor"><span class="door"></span></span><span class="cell cell--wall"></span>
+              </div>
+              <div class="board-row">
+                <span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span>
+              </div>
+            </div>
+          </article>
+
+          <article class="preview-level">
+            <p class="preview-title">Level B</p>
+            <div class="game-board" role="img" aria-label="Level B board">
+              <div class="board-row">
+                <span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span>
+              </div>
+              <div class="board-row">
+                <span class="cell cell--wall"></span><span class="cell cell--goal"></span><span class="cell cell--floor"><span class="block"></span></span><span class="cell cell--floor"><span class="hero"></span></span><span class="cell cell--wall"></span>
+              </div>
+              <div class="board-row">
+                <span class="cell cell--wall"></span><span class="cell cell--floor"></span><span class="cell cell--floor"><span class="door"></span></span><span class="cell cell--floor"></span><span class="cell cell--wall"></span>
+              </div>
+              <div class="board-row">
+                <span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span>
+              </div>
+            </div>
+          </article>
+
+          <article class="preview-level">
+            <p class="preview-title">Level C</p>
+            <div class="game-board" role="img" aria-label="Level C board">
+              <div class="board-row">
+                <span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span>
+              </div>
+              <div class="board-row">
+                <span class="cell cell--wall"></span><span class="cell cell--floor"><span class="hero"></span></span><span class="cell cell--floor"></span><span class="cell cell--floor"><span class="block"></span></span><span class="cell cell--goal"></span><span class="cell cell--floor"></span><span class="cell cell--wall"></span>
+              </div>
+              <div class="board-row">
+                <span class="cell cell--wall"></span><span class="cell cell--floor"></span><span class="cell cell--floor"></span><span class="cell cell--wall"></span><span class="cell cell--floor"></span><span class="cell cell--floor"><span class="door"></span></span><span class="cell cell--wall"></span>
+              </div>
+              <div class="board-row">
+                <span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span><span class="cell cell--wall"></span>
+              </div>
+            </div>
+          </article>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>
