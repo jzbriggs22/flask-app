@@ -1,0 +1,41 @@
+name: Retro CSS Guardrails
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/src/styles/**/*.css'
+      - 'scripts/check_retro_css.sh'
+      - 'scripts/install_git_hook.sh'
+      - '.github/workflows/retro-css-guardrails.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/src/styles/**/*.css'
+      - 'scripts/check_retro_css.sh'
+      - 'scripts/install_git_hook.sh'
+      - '.github/workflows/retro-css-guardrails.yml'
+
+jobs:
+  validate-retro-css:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure ripgrep is available
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ripgrep
+          fi
+
+      - name: Install shellcheck
+        run: |
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y shellcheck
+          fi
+
+      - name: Run CI retro checks
+        run: make ci-retro

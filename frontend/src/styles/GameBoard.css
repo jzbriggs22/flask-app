@@ -1,0 +1,184 @@
+:root {
+  --ti83-bg: #9cab8f;
+  --ti83-screen: #8d9b81;
+  --ti83-dark: #2f3a2e;
+  --ti83-mid: #4a5747;
+  --ti83-light: #b4c2a6;
+  --tile-size: 16px;
+  --pixel-size: 2px;
+}
+
+.game-board {
+  display: inline-grid;
+  grid-auto-rows: var(--tile-size);
+  gap: 0;
+  border: 1px solid var(--ti83-dark);
+  background: var(--ti83-screen);
+  padding: 4px;
+}
+
+.board-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--tile-size);
+  gap: 0;
+}
+
+.cell {
+  width: var(--tile-size);
+  height: var(--tile-size);
+  min-width: var(--tile-size);
+  min-height: var(--tile-size);
+  border: 1px solid var(--ti83-mid);
+  background: var(--ti83-bg);
+  box-sizing: border-box;
+  position: relative;
+  image-rendering: pixelated;
+}
+
+.cell--wall {
+  background: var(--ti83-mid);
+}
+
+.cell--floor {
+  background: var(--ti83-bg);
+}
+
+.cell--goal {
+  background: var(--ti83-light);
+}
+
+.cell--goal::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px solid var(--ti83-dark);
+}
+
+.hero,
+.block,
+.door {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.hero::before,
+.block::before,
+.door::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--pixel-size);
+  height: var(--pixel-size);
+}
+
+/* 8x8 sprite using box-shadow pixels (scaled by --pixel-size) */
+.hero::before {
+  box-shadow:
+    calc(var(--pixel-size) * 2) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 3) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 5) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 1) calc(var(--pixel-size) * 2) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 2) calc(var(--pixel-size) * 2) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 3) calc(var(--pixel-size) * 2) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 2) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 5) calc(var(--pixel-size) * 2) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 6) calc(var(--pixel-size) * 2) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 1) calc(var(--pixel-size) * 3) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 2) calc(var(--pixel-size) * 3) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 3) calc(var(--pixel-size) * 3) 0 var(--ti83-light),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 3) 0 var(--ti83-light),
+    calc(var(--pixel-size) * 5) calc(var(--pixel-size) * 3) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 6) calc(var(--pixel-size) * 3) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 1) calc(var(--pixel-size) * 4) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 2) calc(var(--pixel-size) * 4) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 3) calc(var(--pixel-size) * 4) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 4) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 5) calc(var(--pixel-size) * 4) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 6) calc(var(--pixel-size) * 4) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 2) calc(var(--pixel-size) * 5) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 3) calc(var(--pixel-size) * 5) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 5) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 5) calc(var(--pixel-size) * 5) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 3) calc(var(--pixel-size) * 6) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 6) 0 var(--ti83-dark);
+}
+
+.block::before {
+  box-shadow:
+    calc(var(--pixel-size) * 1) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 2) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 3) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 5) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 6) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 1) calc(var(--pixel-size) * 2) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 6) calc(var(--pixel-size) * 2) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 1) calc(var(--pixel-size) * 3) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 2) calc(var(--pixel-size) * 3) 0 var(--ti83-light),
+    calc(var(--pixel-size) * 3) calc(var(--pixel-size) * 3) 0 var(--ti83-light),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 3) 0 var(--ti83-light),
+    calc(var(--pixel-size) * 5) calc(var(--pixel-size) * 3) 0 var(--ti83-light),
+    calc(var(--pixel-size) * 6) calc(var(--pixel-size) * 3) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 1) calc(var(--pixel-size) * 4) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 2) calc(var(--pixel-size) * 4) 0 var(--ti83-light),
+    calc(var(--pixel-size) * 3) calc(var(--pixel-size) * 4) 0 var(--ti83-light),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 4) 0 var(--ti83-light),
+    calc(var(--pixel-size) * 5) calc(var(--pixel-size) * 4) 0 var(--ti83-light),
+    calc(var(--pixel-size) * 6) calc(var(--pixel-size) * 4) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 1) calc(var(--pixel-size) * 5) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 6) calc(var(--pixel-size) * 5) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 1) calc(var(--pixel-size) * 6) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 2) calc(var(--pixel-size) * 6) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 3) calc(var(--pixel-size) * 6) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 6) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 5) calc(var(--pixel-size) * 6) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 6) calc(var(--pixel-size) * 6) 0 var(--ti83-dark);
+}
+
+.door::before {
+  box-shadow:
+    calc(var(--pixel-size) * 1) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 2) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 3) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 5) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 6) calc(var(--pixel-size) * 1) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 1) calc(var(--pixel-size) * 2) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 6) calc(var(--pixel-size) * 2) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 1) calc(var(--pixel-size) * 3) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 2) calc(var(--pixel-size) * 3) 0 var(--ti83-bg),
+    calc(var(--pixel-size) * 3) calc(var(--pixel-size) * 3) 0 var(--ti83-bg),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 3) 0 var(--ti83-bg),
+    calc(var(--pixel-size) * 5) calc(var(--pixel-size) * 3) 0 var(--ti83-bg),
+    calc(var(--pixel-size) * 6) calc(var(--pixel-size) * 3) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 1) calc(var(--pixel-size) * 4) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 2) calc(var(--pixel-size) * 4) 0 var(--ti83-bg),
+    calc(var(--pixel-size) * 3) calc(var(--pixel-size) * 4) 0 var(--ti83-bg),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 4) 0 var(--ti83-bg),
+    calc(var(--pixel-size) * 5) calc(var(--pixel-size) * 4) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 6) calc(var(--pixel-size) * 4) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 1) calc(var(--pixel-size) * 5) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 2) calc(var(--pixel-size) * 5) 0 var(--ti83-bg),
+    calc(var(--pixel-size) * 3) calc(var(--pixel-size) * 5) 0 var(--ti83-bg),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 5) 0 var(--ti83-bg),
+    calc(var(--pixel-size) * 5) calc(var(--pixel-size) * 5) 0 var(--ti83-bg),
+    calc(var(--pixel-size) * 6) calc(var(--pixel-size) * 5) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 1) calc(var(--pixel-size) * 6) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 2) calc(var(--pixel-size) * 6) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 3) calc(var(--pixel-size) * 6) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 6) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 5) calc(var(--pixel-size) * 6) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 6) calc(var(--pixel-size) * 6) 0 var(--ti83-dark),
+    calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 5) 0 var(--ti83-dark);
+}
+
+@media (max-width: 640px) {
+  :root {
+    --tile-size: 14px;
+    --pixel-size: 1.75px;
+  }
+}
