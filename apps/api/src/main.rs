@@ -73,13 +73,28 @@ async fn main() {
         .route("/api/projects/{project_id}/drawing-sets", post(routes::takeoff::upload_drawing_set))
         .route("/api/projects/{project_id}/drawing-sets/{id}", get(routes::takeoff::get_drawing_set))
 
-        // Takeoff measurement routes
+        // Sheet revision routes (Spec §12)
+        .route("/api/sheets/{sheet_id}/revisions", get(routes::takeoff::list_sheet_revisions))
+
+        // Calibration routes (Spec §5)
+        .route("/api/sheet-revisions/{revision_id}/calibration", get(routes::takeoff::get_calibration))
+        .route("/api/sheet-revisions/{revision_id}/calibration", post(routes::takeoff::set_calibration))
+
+        // Takeoff layer routes (Spec §8)
         .route("/api/drawing-sets/{drawing_set_id}/layers", get(routes::takeoff::list_layers))
         .route("/api/drawing-sets/{drawing_set_id}/layers", post(routes::takeoff::create_layer))
+
+        // Measurement routes (Spec §6, §9)
         .route("/api/layers/{layer_id}/measurements", get(routes::takeoff::list_measurements))
         .route("/api/layers/{layer_id}/measurements", post(routes::takeoff::create_measurement))
+        .route("/api/measurements/{id}", put(routes::takeoff::update_measurement))
+        .route("/api/measurements/{id}", delete(routes::takeoff::soft_delete_measurement))
+        .route("/api/measurements/{id}/versions", get(routes::takeoff::list_measurement_versions))
 
-        // Estimate routes
+        // Takeoff events (Spec §9)
+        .route("/api/projects/{project_id}/takeoff-events", get(routes::takeoff::list_events))
+
+        // Estimate routes (Spec §11)
         .route("/api/projects/{project_id}/estimates", get(routes::estimating::list_estimates))
         .route("/api/projects/{project_id}/estimates", post(routes::estimating::create_estimate))
         .route("/api/estimates/{estimate_id}", get(routes::estimating::get_estimate))
