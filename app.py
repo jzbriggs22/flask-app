@@ -1,25 +1,30 @@
+import os
 from flask import Flask, jsonify
 from models import db, Bird, Achievement, RARITY_XP
 from seed_data import BIRDS, ACHIEVEMENTS
-from routes import auth_bp, birds_bp, sightings_bp, birdex_bp, leaderboard_bp
+from routes import auth_bp, birds_bp, sightings_bp, birdex_bp, leaderboard_bp, pages_bp
 
 
 def create_app():
     app = Flask(__name__)
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///birding.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
 
     db.init_app(app)
 
-    # Register blueprints
+    # API blueprints
     app.register_blueprint(auth_bp, url_prefix="/api")
     app.register_blueprint(birds_bp, url_prefix="/api")
     app.register_blueprint(sightings_bp, url_prefix="/api")
     app.register_blueprint(birdex_bp, url_prefix="/api")
     app.register_blueprint(leaderboard_bp, url_prefix="/api")
 
-    @app.route("/")
-    def home():
+    # Frontend pages
+    app.register_blueprint(pages_bp)
+
+    @app.route("/api/info")
+    def api_info():
         return jsonify({
             "app": "BirdCatch - Gamified Birding",
             "version": "0.1.0",

@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from models import db, User, Bird, Sighting, RARITY_XP, user_sightings
 
 sightings_bp = Blueprint("sightings", __name__)
@@ -51,11 +51,13 @@ def log_sighting():
     Log a bird sighting -- the core 'catch' mechanic.
     Awards XP, updates streaks, checks for new species, and triggers achievements.
     """
-    data = request.get_json()
-    if not data or not all(k in data for k in ("user_id", "bird_id")):
-        return jsonify({"error": "user_id and bird_id are required"}), 400
+    data = request.get_json() or {}
 
-    user = User.query.get(data["user_id"])
+    user_id = data.get("user_id") or session.get("user_id")
+    if not user_id or "bird_id" not in data:
+        return jsonify({"error": "bird_id is required (user_id from session or body)"}), 400
+
+    user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
 

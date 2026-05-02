@@ -1,7 +1,20 @@
-from flask import Blueprint, request, jsonify
+from functools import wraps
+from flask import Blueprint, request, jsonify, session, redirect, url_for
+
 from models import db, User
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "user_id" not in session:
+            if request.headers.get("Accept", "").startswith("application/json"):
+                return jsonify({"error": "Authentication required"}), 401
+            return redirect(url_for("pages.landing"))
+        return f(*args, **kwargs)
+    return decorated
 
 
 @auth_bp.route("/register", methods=["POST"])
@@ -20,6 +33,9 @@ def register():
     db.session.add(user)
     db.session.commit()
 
+    session["user_id"] = user.id
+    session["username"] = user.username
+
     return jsonify({"message": "Registration successful", "user": user.to_dict()}), 201
 
 
@@ -33,7 +49,9 @@ def login():
     if not user or not user.check_password(data["password"]):
         return jsonify({"error": "Invalid credentials"}), 401
 
-    # In a production app you'd return a JWT here
+    session["user_id"] = user.id
+    session["username"] = user.username
+
     return jsonify({
         "message": "Login successful",
         "user": user.to_dict(),
@@ -41,10 +59,15 @@ def login():
     }), 200
 
 
+@auth_bp.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return jsonify({"message": "Logged out"}), 200
+
+
 @auth_bp.route("/profile/<int:user_id>", methods=["GET"])
 def get_profile(user_id):
     user = User.query.get_or_404(user_id)
     profile = user.to_dict()
-    # Include recent achievements
     profile["achievements"] = [a.to_dict() for a in user.achievements]
     return jsonify(profile), 200

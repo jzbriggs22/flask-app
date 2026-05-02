@@ -1,4 +1,4 @@
-"""Smoke tests for the BirdCatch API."""
+"""Tests for the BirdCatch API and frontend routes."""
 import json
 import os
 import sys
@@ -51,15 +51,16 @@ def post_json(client, url, data):
     return client.post(url, data=json.dumps(data), content_type="application/json")
 
 
-def test_home(client):
-    r = client.get("/")
+# ===== API Tests =====
+
+def test_api_info(client):
+    r = client.get("/api/info")
     assert r.status_code == 200
     data = r.get_json()
     assert data["app"] == "BirdCatch - Gamified Birding"
 
 
 def test_register_and_login(client):
-    # Register
     r = post_json(client, "/api/register", {
         "username": "birder1", "email": "birder1@test.com", "password": "secret123"
     })
@@ -68,11 +69,9 @@ def test_register_and_login(client):
     assert data["user"]["username"] == "birder1"
     assert data["user"]["level"] == 1
 
-    # Login
     r = post_json(client, "/api/login", {"username": "birder1", "password": "secret123"})
     assert r.status_code == 200
 
-    # Duplicate register
     r = post_json(client, "/api/register", {
         "username": "birder1", "email": "birder1@test.com", "password": "secret123"
     })
@@ -85,7 +84,6 @@ def test_list_birds(client):
     data = r.get_json()
     assert data["count"] == 49
 
-    # Filter by rarity
     r = client.get("/api/birds?rarity=legendary")
     data = r.get_json()
     assert data["count"] == 5
@@ -99,12 +97,10 @@ def test_bird_search(client):
 
 
 def test_log_sighting_and_xp(client):
-    # Register user
     post_json(client, "/api/register", {
         "username": "catcher", "email": "catcher@test.com", "password": "pass"
     })
 
-    # Log a sighting (American Robin, id=1, common, 10 XP base + 10 new species bonus)
     r = post_json(client, "/api/sightings", {
         "user_id": 1, "bird_id": 1,
         "latitude": 40.7128, "longitude": -74.0060,
@@ -117,28 +113,36 @@ def test_log_sighting_and_xp(client):
     assert data["xp_breakdown"]["new_species_bonus"] == 10
     assert data["user_stats"]["total_sightings"] == 1
 
-    # Log same bird again -- no new species bonus
     r = post_json(client, "/api/sightings", {"user_id": 1, "bird_id": 1})
     data = r.get_json()
     assert data["is_new_species"] is False
     assert data["xp_breakdown"]["new_species_bonus"] == 0
 
 
+def test_sighting_with_session(client):
+    """Sighting endpoint works using session user_id (no user_id in body)."""
+    post_json(client, "/api/register", {
+        "username": "sessionuser", "email": "session@test.com", "password": "pass"
+    })
+    # Session is now set from register; post with just bird_id
+    r = post_json(client, "/api/sightings", {"bird_id": 1})
+    assert r.status_code == 201
+    data = r.get_json()
+    assert data["is_new_species"] is True
+
+
 def test_birdex(client):
     post_json(client, "/api/register", {
         "username": "collector", "email": "collector@test.com", "password": "pass"
     })
-    # Catch a bird
     post_json(client, "/api/sightings", {"user_id": 1, "bird_id": 1})
 
-    # Check Birdex
     r = client.get("/api/birdex/1")
     assert r.status_code == 200
     data = r.get_json()
     assert data["caught_species"] == 1
     assert data["total_species"] == 49
 
-    # Filter caught only
     r = client.get("/api/birdex/1?show=caught")
     data = r.get_json()
     assert len(data["entries"]) == 1
@@ -164,7 +168,6 @@ def test_leaderboard(client):
     post_json(client, "/api/register", {
         "username": "leader2", "email": "l2@test.com", "password": "pass"
     })
-    # Give user2 more XP
     post_json(client, "/api/sightings", {"user_id": 2, "bird_id": 1})
 
     r = client.get("/api/leaderboard")
@@ -199,7 +202,6 @@ def test_achievements_earned(client):
     post_json(client, "/api/register", {
         "username": "achiever", "email": "achiever@test.com", "password": "pass"
     })
-    # Log first sighting to trigger "First Catch" achievement
     r = post_json(client, "/api/sightings", {"user_id": 1, "bird_id": 1})
     data = r.get_json()
     assert "new_achievements" in data
@@ -223,3 +225,96 @@ def test_habitats_endpoint(client):
 def test_regions_endpoint(client):
     r = client.get("/api/birds/regions")
     assert r.status_code == 200
+
+
+def test_logout(client):
+    post_json(client, "/api/register", {
+        "username": "logoutuser", "email": "logout@test.com", "password": "pass"
+    })
+    r = client.post("/api/logout", content_type="application/json")
+    assert r.status_code == 200
+
+
+# ===== Frontend Route Tests =====
+
+def test_landing_page(client):
+    r = client.get("/")
+    assert r.status_code == 200
+    assert b"BirdCatch" in r.data
+
+
+def test_landing_redirects_when_logged_in(client):
+    post_json(client, "/api/register", {
+        "username": "loggedin", "email": "li@test.com", "password": "pass"
+    })
+    r = client.get("/", follow_redirects=False)
+    assert r.status_code == 302
+    assert "/dashboard" in r.headers["Location"]
+
+
+def test_catalog_public(client):
+    r = client.get("/catalog")
+    assert r.status_code == 200
+    assert b"Bird Catalog" in r.data
+
+
+def test_leaderboard_public(client):
+    r = client.get("/leaderboard")
+    assert r.status_code == 200
+    assert b"Leaderboard" in r.data
+
+
+def test_dashboard_requires_login(client):
+    r = client.get("/dashboard", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_catch_requires_login(client):
+    r = client.get("/catch", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_birdex_page_requires_login(client):
+    r = client.get("/birdex", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_achievements_page_requires_login(client):
+    r = client.get("/achievements", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_dashboard_accessible_when_logged_in(client):
+    post_json(client, "/api/register", {
+        "username": "dashuser", "email": "dash@test.com", "password": "pass"
+    })
+    r = client.get("/dashboard")
+    assert r.status_code == 200
+    assert b"dashuser" in r.data
+
+
+def test_catch_page_accessible_when_logged_in(client):
+    post_json(client, "/api/register", {
+        "username": "catchuser", "email": "catch@test.com", "password": "pass"
+    })
+    r = client.get("/catch")
+    assert r.status_code == 200
+    assert b"Catch a Bird" in r.data
+
+
+def test_birdex_page_accessible_when_logged_in(client):
+    post_json(client, "/api/register", {
+        "username": "birdexuser", "email": "birdex@test.com", "password": "pass"
+    })
+    r = client.get("/birdex")
+    assert r.status_code == 200
+    assert b"Birdex" in r.data
+
+
+def test_achievements_page_accessible_when_logged_in(client):
+    post_json(client, "/api/register", {
+        "username": "achuser", "email": "ach@test.com", "password": "pass"
+    })
+    r = client.get("/achievements")
+    assert r.status_code == 200
+    assert b"Achievements" in r.data

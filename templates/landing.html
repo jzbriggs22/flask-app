@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}BirdCatch - Gotta Spot 'Em All!{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <h1>BirdCatch</h1>
+    <p class="tagline">Gotta Spot 'Em All!</p>
+    <p style="color: var(--color-text-light); margin-bottom: 2rem;">
+        A gamified birding adventure. Spot birds, earn XP, level up, and complete your Birdex.
+    </p>
+
+    <div class="auth-container card">
+        <div class="auth-tabs">
+            <button class="auth-tab active" data-tab="login">Login</button>
+            <button class="auth-tab" data-tab="register">Register</button>
+        </div>
+
+        <form id="login-form" class="auth-form active">
+            <div class="form-group">
+                <label for="login-username">Username</label>
+                <input type="text" id="login-username" required autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label for="login-password">Password</label>
+                <input type="password" id="login-password" required autocomplete="current-password">
+            </div>
+            <div class="form-error" id="login-error"></div>
+            <button type="submit" class="btn btn-primary btn-lg" style="width:100%; margin-top:0.5rem;">Login</button>
+        </form>
+
+        <form id="register-form" class="auth-form">
+            <div class="form-group">
+                <label for="reg-username">Username</label>
+                <input type="text" id="reg-username" required autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label for="reg-email">Email</label>
+                <input type="email" id="reg-email" required autocomplete="email">
+            </div>
+            <div class="form-group">
+                <label for="reg-password">Password</label>
+                <input type="password" id="reg-password" required autocomplete="new-password">
+            </div>
+            <div class="form-error" id="register-error"></div>
+            <button type="submit" class="btn btn-primary btn-lg" style="width:100%; margin-top:0.5rem;">Create Account</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    // Tab switching
+    document.querySelectorAll(".auth-tab").forEach(tab => {
+        tab.addEventListener("click", () => {
+            document.querySelectorAll(".auth-tab").forEach(t => t.classList.remove("active"));
+            document.querySelectorAll(".auth-form").forEach(f => f.classList.remove("active"));
+            tab.classList.add("active");
+            document.getElementById(tab.dataset.tab + "-form").classList.add("active");
+        });
+    });
+
+    // Login
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const errEl = document.getElementById("login-error");
+        errEl.classList.remove("visible");
+
+        const res = await apiFetch("/api/login", {
+            method: "POST",
+            body: JSON.stringify({
+                username: document.getElementById("login-username").value,
+                password: document.getElementById("login-password").value,
+            }),
+        });
+
+        if (res.ok) {
+            window.location.href = "/dashboard";
+        } else {
+            errEl.textContent = res.data.error || "Login failed";
+            errEl.classList.add("visible");
+        }
+    });
+
+    // Register
+    document.getElementById("register-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const errEl = document.getElementById("register-error");
+        errEl.classList.remove("visible");
+
+        const res = await apiFetch("/api/register", {
+            method: "POST",
+            body: JSON.stringify({
+                username: document.getElementById("reg-username").value,
+                email: document.getElementById("reg-email").value,
+                password: document.getElementById("reg-password").value,
+            }),
+        });
+
+        if (res.ok) {
+            window.location.href = "/dashboard";
+        } else {
+            errEl.textContent = res.data.error || "Registration failed";
+            errEl.classList.add("visible");
+        }
+    });
+});
+</script>
+{% endblock %}
