@@ -14,15 +14,17 @@
             <div class="nav-links">
                 {% if session.get('user_id') %}
                 <a href="{{ url_for('pages.dashboard') }}">Dashboard</a>
-                <a href="{{ url_for('pages.catalog') }}">Catalog</a>
+                <a href="{{ url_for('pages.explore') }}">Explore</a>
                 <a href="{{ url_for('pages.catch') }}">Catch</a>
+                <a href="{{ url_for('pages.challenges') }}">Quests</a>
                 <a href="{{ url_for('pages.birdex') }}">Birdex</a>
-                <a href="{{ url_for('pages.achievements') }}">Achievements</a>
+                <a href="{{ url_for('pages.feed') }}">Feed</a>
                 <a href="{{ url_for('pages.leaderboard') }}">Leaderboard</a>
                 <span class="nav-user">{{ session.get('username') }}</span>
                 <button class="btn btn-sm btn-secondary" id="logout-btn">Logout</button>
                 {% else %}
                 <a href="{{ url_for('pages.catalog') }}">Catalog</a>
+                <a href="{{ url_for('pages.feed') }}">Feed</a>
                 <a href="{{ url_for('pages.leaderboard') }}">Leaderboard</a>
                 <a href="{{ url_for('pages.landing') }}" class="btn btn-sm btn-primary">Login</a>
                 {% endif %}

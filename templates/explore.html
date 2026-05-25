@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Explore - BirdCatch{% endblock %}
+
+{% block content %}
+<div class="section-header">
+    <h1>Explore</h1>
+    <p>Venture into a habitat and see what birds appear!</p>
+</div>
+
+<!-- Habitat Selector -->
+<div class="grid grid-3 mb-3" id="habitat-select">
+    <button class="habitat-btn card" data-habitat="forest" style="cursor:pointer; text-align:center;">
+        <div style="font-size:2.5rem;">🌲</div>
+        <div style="font-weight:700; margin-top:0.5rem;">Forest</div>
+    </button>
+    <button class="habitat-btn card" data-habitat="wetland" style="cursor:pointer; text-align:center;">
+        <div style="font-size:2.5rem;">🏞️</div>
+        <div style="font-weight:700; margin-top:0.5rem;">Wetland</div>
+    </button>
+    <button class="habitat-btn card" data-habitat="urban" style="cursor:pointer; text-align:center;">
+        <div style="font-size:2.5rem;">🏙️</div>
+        <div style="font-weight:700; margin-top:0.5rem;">Urban</div>
+    </button>
+    <button class="habitat-btn card" data-habitat="grassland" style="cursor:pointer; text-align:center;">
+        <div style="font-size:2.5rem;">🌾</div>
+        <div style="font-weight:700; margin-top:0.5rem;">Grassland</div>
+    </button>
+    <button class="habitat-btn card" data-habitat="coastal" style="cursor:pointer; text-align:center;">
+        <div style="font-size:2.5rem;">🏖️</div>
+        <div style="font-weight:700; margin-top:0.5rem;">Coastal</div>
+    </button>
+    <button class="habitat-btn card" data-habitat="mountain" style="cursor:pointer; text-align:center;">
+        <div style="font-size:2.5rem;">⛰️</div>
+        <div style="font-weight:700; margin-top:0.5rem;">Mountain</div>
+    </button>
+</div>
+
+<!-- Encounters -->
+<div id="encounter-area" class="hidden">
+    <div class="flex-between mb-2">
+        <h2 id="encounter-title">Birds Spotted!</h2>
+        <button class="btn btn-secondary" id="explore-again">Explore Again</button>
+    </div>
+    <div class="grid grid-2" id="encounter-grid"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const habitatSelect = document.getElementById("habitat-select");
+    const encounterArea = document.getElementById("encounter-area");
+    const encounterGrid = document.getElementById("encounter-grid");
+    const encounterTitle = document.getElementById("encounter-title");
+
+    document.querySelectorAll(".habitat-btn").forEach(btn => {
+        btn.addEventListener("click", async () => {
+            const habitat = btn.dataset.habitat;
+            encounterTitle.textContent = `Exploring ${habitat}...`;
+            habitatSelect.classList.add("hidden");
+            encounterArea.classList.remove("hidden");
+            encounterGrid.innerHTML = '<p style="text-align:center; color:var(--color-text-light);">Searching for birds...</p>';
+
+            const res = await apiFetch(`/api/encounter/batch?habitat=${habitat}&count=4`);
+            if (!res.ok) {
+                encounterGrid.innerHTML = '<p>No birds found in this area.</p>';
+                return;
+            }
+
+            encounterTitle.textContent = `${res.data.encounters.length} bird(s) spotted in the ${habitat}!`;
+            encounterGrid.innerHTML = res.data.encounters.map(enc => {
+                const b = enc.bird;
+                const caughtClass = enc.already_caught ? "badge-uncommon" : "badge-rare";
+                const caughtText = enc.already_caught ? "Seen Before" : "New Encounter!";
+                return `<div class="bird-card" style="animation: slideUp 0.4s ease;">
+                    <div class="flex-between">
+                        <div class="bird-name">${b.common_name}</div>
+                        <span class="badge badge-${b.rarity}">${b.rarity}</span>
+                    </div>
+                    <div class="bird-scientific">${b.scientific_name}</div>
+                    <div class="bird-desc">${b.description}</div>
+                    <div class="bird-meta">
+                        <span class="tag">${b.habitat}</span>
+                        <span class="badge ${caughtClass}">${caughtText}</span>
+                    </div>
+                    <div style="margin-top:0.75rem;">
+                        <a href="/catch" class="btn btn-sm btn-success">Log Sighting (+${b.xp_value} XP)</a>
+                    </div>
+                </div>`;
+            }).join("");
+        });
+    });
+
+    document.getElementById("explore-again").addEventListener("click", () => {
+        encounterArea.classList.add("hidden");
+        habitatSelect.classList.remove("hidden");
+    });
+});
+</script>
+{% endblock %}

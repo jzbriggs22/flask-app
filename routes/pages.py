@@ -1,6 +1,8 @@
+from datetime import datetime, timezone
 from flask import Blueprint, render_template, session, redirect, url_for
-from models import db, User, Bird, Sighting, Achievement, LEVEL_THRESHOLDS
+from models import db, User, Bird, Sighting, Achievement, DailyChallenge, LEVEL_THRESHOLDS
 from routes.auth import login_required
+from routes.challenges import generate_daily_challenges
 
 pages_bp = Blueprint("pages", __name__)
 
@@ -19,6 +21,7 @@ def dashboard():
     recent_sightings = user.sightings.order_by(Sighting.spotted_at.desc()).limit(5).all()
     next_level_xp = LEVEL_THRESHOLDS[user.level] if user.level < len(LEVEL_THRESHOLDS) else None
     prev_level_xp = LEVEL_THRESHOLDS[user.level - 1] if user.level > 0 else 0
+    today_challenges = generate_daily_challenges(user)
     return render_template(
         "dashboard.html",
         user=user,
@@ -26,6 +29,7 @@ def dashboard():
         next_level_xp=next_level_xp,
         prev_level_xp=prev_level_xp,
         total_birds=Bird.query.count(),
+        challenges=today_challenges,
     )
 
 
@@ -90,3 +94,38 @@ def achievements():
 def leaderboard():
     users = User.query.order_by(User.xp.desc()).limit(50).all()
     return render_template("leaderboard.html", users=users)
+
+
+@pages_bp.route("/explore")
+@login_required
+def explore():
+    return render_template("explore.html")
+
+
+@pages_bp.route("/challenges")
+@login_required
+def challenges():
+    user = User.query.get(session["user_id"])
+    today_challenges = generate_daily_challenges(user)
+    return render_template("challenges.html", challenges=today_challenges, user=user)
+
+
+@pages_bp.route("/feed")
+def feed():
+    recent = Sighting.query.order_by(Sighting.spotted_at.desc()).limit(30).all()
+    return render_template("feed.html", sightings=recent)
+
+
+@pages_bp.route("/profile/<int:user_id>")
+def public_profile(user_id):
+    user = User.query.get_or_404(user_id)
+    recent_sightings = user.sightings.order_by(Sighting.spotted_at.desc()).limit(10).all()
+    caught_count = len(user.caught_birds)
+    total_birds = Bird.query.count()
+    return render_template(
+        "profile.html",
+        profile_user=user,
+        sightings=recent_sightings,
+        caught_count=caught_count,
+        total_birds=total_birds,
+    )

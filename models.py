@@ -160,6 +160,34 @@ class Sighting(db.Model):
         }
 
 
+class DailyChallenge(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    challenge_type = db.Column(db.String(50), nullable=False)  # spot_count, spot_rarity, spot_habitat, spot_new
+    target_value = db.Column(db.String(100), nullable=False)  # e.g. "3" for count, "rare" for rarity, "forest" for habitat
+    target_count = db.Column(db.Integer, nullable=False, default=1)
+    current_count = db.Column(db.Integer, default=0)
+    completed = db.Column(db.Boolean, default=False)
+    xp_reward = db.Column(db.Integer, nullable=False, default=50)
+    description = db.Column(db.String(200), nullable=False)
+
+    user_rel = db.relationship("User", backref=db.backref("daily_challenges", lazy="dynamic"))
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "date": self.date.isoformat(),
+            "challenge_type": self.challenge_type,
+            "description": self.description,
+            "target_count": self.target_count,
+            "current_count": self.current_count,
+            "completed": self.completed,
+            "xp_reward": self.xp_reward,
+            "progress_pct": round(min(self.current_count / self.target_count * 100, 100), 1),
+        }
+
+
 class Achievement(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)

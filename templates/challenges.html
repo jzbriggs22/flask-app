@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Daily Quests - BirdCatch{% endblock %}
+
+{% block content %}
+<div class="section-header">
+    <h1>Daily Quests</h1>
+    <p>Complete quests for bonus XP. New quests appear every day!</p>
+</div>
+
+<div class="grid grid-2" id="challenges-grid">
+    {% for ch in challenges %}
+    <div class="card" style="border-left: 4px solid {{ 'var(--color-success)' if ch.completed else 'var(--color-primary)' }};">
+        <div class="flex-between">
+            <div>
+                <div style="font-weight:700; font-size:1.05rem;">
+                    {% if ch.completed %}&#10003; {% endif %}{{ ch.description }}
+                </div>
+                <div style="font-size:0.85rem; color:var(--color-text-light); margin-top:0.25rem;">
+                    Reward: <strong style="color:var(--color-primary);">+{{ ch.xp_reward }} XP</strong>
+                </div>
+            </div>
+            <div style="text-align:right;">
+                {% if ch.completed %}
+                <span class="badge badge-uncommon" style="font-size:0.85rem;">Done!</span>
+                {% else %}
+                <span style="font-weight:700; font-size:1.2rem; color:var(--color-primary);">
+                    {{ ch.current_count }}/{{ ch.target_count }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="progress-bar mt-1">
+            <div class="progress-fill" style="width: {{ (ch.current_count / ch.target_count * 100) | round(1) }}%;
+                background: {{ 'var(--color-success)' if ch.completed else 'var(--color-primary)' }};"></div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% set completed_count = challenges | selectattr('completed') | list | length %}
+{% if completed_count == challenges | length %}
+<div class="card mt-3 text-center" style="border: 2px solid var(--color-success);">
+    <div style="font-size:2rem;">&#127942;</div>
+    <div style="font-weight:700; font-size:1.2rem; margin-top:0.5rem;">All quests complete!</div>
+    <p style="color:var(--color-text-light);">Come back tomorrow for new challenges.</p>
+</div>
+{% else %}
+<div class="text-center mt-3">
+    <a href="{{ url_for('pages.catch') }}" class="btn btn-catch">Go Catch Birds!</a>
+</div>
+{% endif %}
+{% endblock %}

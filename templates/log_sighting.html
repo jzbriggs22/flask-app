@@ -163,6 +163,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div>`;
             });
         }
+
+        // Completed challenges
+        if (data.completed_challenges && data.completed_challenges.length > 0) {
+            data.completed_challenges.forEach(c => {
+                achSection.innerHTML += `<div class="achievement-reveal" style="border-color:var(--color-primary);">
+                    &#127919; <strong>Quest Complete!</strong> ${c.description} (+${c.xp_reward} XP)
+                </div>`;
+            });
+        }
     }
 
     // Catch another

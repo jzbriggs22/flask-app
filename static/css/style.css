@@ -515,6 +515,37 @@ a:hover { text-decoration: underline; }
 .hidden { display: none !important; }
 .count-display { font-size: 0.9rem; color: var(--color-text-light); }
 
+/* ===== Habitat Buttons ===== */
+.habitat-btn {
+    border: 2px solid var(--color-border);
+    background: var(--color-card);
+    transition: all 0.2s;
+    padding: 1.5rem;
+}
+.habitat-btn:hover {
+    border-color: var(--color-primary);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+}
+
+/* ===== Feed ===== */
+.feed-list .card { transition: transform 0.2s; }
+.feed-list .card:hover { transform: translateX(4px); }
+
+/* ===== Profile Avatar ===== */
+.profile-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--color-primary), #7C3AED);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 2rem;
+    font-weight: 800;
+}
+
 /* ===== Animations ===== */
 @keyframes slideUp {
     from { opacity: 0; transform: translateY(20px); }

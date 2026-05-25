@@ -37,10 +37,35 @@
 </div>
 
 <!-- Quick Actions -->
-<div class="flex gap-1 mb-3">
+<div class="flex gap-1 mb-3" style="flex-wrap:wrap;">
     <a href="{{ url_for('pages.catch') }}" class="btn btn-catch">Catch a Bird!</a>
-    <a href="{{ url_for('pages.birdex') }}" class="btn btn-primary">View Birdex</a>
+    <a href="{{ url_for('pages.explore') }}" class="btn btn-primary">Explore</a>
+    <a href="{{ url_for('pages.birdex') }}" class="btn btn-secondary">View Birdex</a>
 </div>
+
+<!-- Daily Quests -->
+{% if challenges %}
+<div class="card mb-3">
+    <div class="flex-between" style="margin-bottom:1rem;">
+        <h2>Daily Quests</h2>
+        <a href="{{ url_for('pages.challenges') }}" style="font-size:0.85rem;">View All</a>
+    </div>
+    {% for ch in challenges %}
+    <div style="padding:0.5rem 0; {{ 'border-bottom:1px solid var(--color-border);' if not loop.last else '' }}">
+        <div class="flex-between">
+            <span style="font-weight:600; {{ 'text-decoration:line-through; opacity:0.6;' if ch.completed else '' }}">
+                {% if ch.completed %}&#10003; {% endif %}{{ ch.description }}
+            </span>
+            <span style="font-size:0.8rem; color:var(--color-primary); font-weight:600;">+{{ ch.xp_reward }} XP</span>
+        </div>
+        <div class="progress-bar mt-1">
+            <div class="progress-fill" style="width:{{ (ch.current_count / ch.target_count * 100) | round(1) }}%;
+                background:{{ 'var(--color-success)' if ch.completed else 'var(--color-primary)' }};"></div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
 
 <!-- Recent Sightings -->
 <div class="card">

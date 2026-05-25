@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Activity Feed - BirdCatch{% endblock %}
+
+{% block content %}
+<div class="section-header">
+    <h1>Activity Feed</h1>
+    <p>Recent catches from birders around the world</p>
+</div>
+
+{% if sightings %}
+<div class="feed-list">
+    {% for s in sightings %}
+    <div class="card mb-2" style="animation: fadeIn 0.3s ease {{ loop.index * 0.05 }}s both;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div>
+                <div style="margin-bottom:0.4rem;">
+                    <a href="{{ url_for('pages.public_profile', user_id=s.user.id) }}" style="font-weight:700; text-decoration:none;">
+                        {{ s.user.username }}
+                    </a>
+                    <span style="color:var(--color-text-light);"> spotted </span>
+                    <strong>{{ s.bird.common_name }}</strong>
+                    <span class="badge badge-{{ s.bird.rarity }}">{{ s.bird.rarity }}</span>
+                    {% if s.is_new_species %}
+                    <span class="badge badge-uncommon">NEW!</span>
+                    {% endif %}
+                </div>
+                <div style="font-size:0.8rem; font-style:italic; color:var(--color-text-light);">
+                    {{ s.bird.scientific_name }}
+                </div>
+                {% if s.location_name %}
+                <div style="font-size:0.8rem; color:var(--color-text-light); margin-top:0.3rem;">
+                    &#128205; {{ s.location_name }}
+                </div>
+                {% endif %}
+                {% if s.notes %}
+                <div style="font-size:0.85rem; margin-top:0.4rem; color:var(--color-text);">
+                    "{{ s.notes }}"
+                </div>
+                {% endif %}
+            </div>
+            <div style="text-align:right; white-space:nowrap;">
+                <div style="font-weight:700; color:var(--color-primary);">+{{ s.xp_earned }} XP</div>
+                <div style="font-size:0.75rem; color:var(--color-text-light);">
+                    {{ s.spotted_at.strftime('%b %d, %H:%M') }}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card text-center">
+    <p style="color:var(--color-text-light);">No sightings yet. Be the first to catch a bird!</p>
+    {% if session.get('user_id') %}
+    <a href="{{ url_for('pages.catch') }}" class="btn btn-catch mt-2">Catch a Bird!</a>
+    {% else %}
+    <a href="{{ url_for('pages.landing') }}" class="btn btn-primary mt-2">Join BirdCatch</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -318,3 +318,108 @@ def test_achievements_page_accessible_when_logged_in(client):
     r = client.get("/achievements")
     assert r.status_code == 200
     assert b"Achievements" in r.data
+
+
+# ===== New Feature Tests =====
+
+def test_daily_challenges_api(client):
+    post_json(client, "/api/register", {
+        "username": "questuser", "email": "quest@test.com", "password": "pass"
+    })
+    r = client.get("/api/challenges")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "challenges" in data
+    assert len(data["challenges"]) == 3
+    # Calling again returns same challenges (idempotent)
+    r2 = client.get("/api/challenges")
+    assert len(r2.get_json()["challenges"]) == 3
+
+
+def test_challenges_require_auth(client):
+    r = client.get("/api/challenges")
+    assert r.status_code == 401
+
+
+def test_random_encounter(client):
+    r = client.get("/api/encounter")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "encounter" in data
+    assert "common_name" in data["encounter"]
+    assert "message" in data
+
+
+def test_encounter_with_habitat_filter(client):
+    r = client.get("/api/encounter?habitat=forest")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["encounter"]["habitat"] == "forest"
+
+
+def test_batch_encounter(client):
+    r = client.get("/api/encounter/batch?count=3")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "encounters" in data
+    assert len(data["encounters"]) <= 3
+
+
+def test_feed_page_public(client):
+    r = client.get("/feed")
+    assert r.status_code == 200
+    assert b"Activity Feed" in r.data
+
+
+def test_explore_requires_login(client):
+    r = client.get("/explore", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_challenges_page_requires_login(client):
+    r = client.get("/challenges", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_explore_accessible_when_logged_in(client):
+    post_json(client, "/api/register", {
+        "username": "explorer", "email": "explore@test.com", "password": "pass"
+    })
+    r = client.get("/explore")
+    assert r.status_code == 200
+    assert b"Explore" in r.data
+
+
+def test_challenges_page_accessible_when_logged_in(client):
+    post_json(client, "/api/register", {
+        "username": "questpage", "email": "questpage@test.com", "password": "pass"
+    })
+    r = client.get("/challenges")
+    assert r.status_code == 200
+    assert b"Daily Quests" in r.data
+
+
+def test_public_profile(client):
+    post_json(client, "/api/register", {
+        "username": "publicuser", "email": "pub@test.com", "password": "pass"
+    })
+    r = client.get("/profile/1")
+    assert r.status_code == 200
+    assert b"publicuser" in r.data
+
+
+def test_challenge_progress_on_sighting(client):
+    post_json(client, "/api/register", {
+        "username": "challenger", "email": "challenger@test.com", "password": "pass"
+    })
+    # Generate challenges first
+    client.get("/api/challenges")
+    # Log a sighting
+    r = post_json(client, "/api/sightings", {"bird_id": 1})
+    assert r.status_code == 201
+    # Check challenges updated
+    r2 = client.get("/api/challenges")
+    data = r2.get_json()
+    # At least one challenge should have progress > 0
+    has_progress = any(c["current_count"] > 0 for c in data["challenges"])
+    assert has_progress

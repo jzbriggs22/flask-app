@@ -2,7 +2,10 @@ import os
 from flask import Flask, jsonify
 from models import db, Bird, Achievement, RARITY_XP
 from seed_data import BIRDS, ACHIEVEMENTS
-from routes import auth_bp, birds_bp, sightings_bp, birdex_bp, leaderboard_bp, pages_bp
+from routes import (
+    auth_bp, birds_bp, sightings_bp, birdex_bp, leaderboard_bp,
+    challenges_bp, encounter_bp, pages_bp,
+)
 
 
 def create_app():
@@ -19,6 +22,8 @@ def create_app():
     app.register_blueprint(sightings_bp, url_prefix="/api")
     app.register_blueprint(birdex_bp, url_prefix="/api")
     app.register_blueprint(leaderboard_bp, url_prefix="/api")
+    app.register_blueprint(challenges_bp, url_prefix="/api")
+    app.register_blueprint(encounter_bp, url_prefix="/api")
 
     # Frontend pages
     app.register_blueprint(pages_bp)

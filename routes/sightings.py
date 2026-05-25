@@ -100,6 +100,11 @@ def log_sighting():
 
     # Check achievements
     newly_earned = check_achievements(user)
+
+    # Update daily challenges
+    from routes.challenges import update_challenges_for_sighting
+    completed_challenges = update_challenges_for_sighting(user, bird, is_new)
+
     db.session.commit()
 
     response = {
@@ -123,6 +128,9 @@ def log_sighting():
 
     if newly_earned:
         response["new_achievements"] = [a.to_dict() for a in newly_earned]
+
+    if completed_challenges:
+        response["completed_challenges"] = [c.to_dict() for c in completed_challenges]
 
     return jsonify(response), 201
 
