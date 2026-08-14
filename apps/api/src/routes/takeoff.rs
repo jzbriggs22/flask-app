@@ -254,10 +254,16 @@ pub async fn create_measurement(
     let version_id = Uuid::new_v4();
     let user_id = Uuid::nil(); // TODO: get from auth context
 
-    // Compute quantities server-side from WORLD geometry
+    // Compute quantities server-side from WORLD geometry (Spec §6)
     let quantity_raw = compute_quantity_raw(&body.measurement_type, &body.points);
-    // quantity_real requires calibration lookup — done if calibration_id provided
-    let quantity_real: Option<f64> = None; // TODO: look up calibration and compute
+    let quantity_real = compute_quantity_real(
+        &pool,
+        &body.measurement_type,
+        quantity_raw,
+        body.calibration_id,
+        &body.uom,
+    )
+    .await;
 
     // Insert measurement (materialized state)
     let measurement = sqlx::query_as::<_, Measurement>(
@@ -384,6 +390,16 @@ pub async fn update_measurement(
     let new_points = body.points.as_ref().unwrap_or(&existing.points.0);
     let new_uom = body.uom.as_deref().unwrap_or(&existing.uom);
     let quantity_raw = compute_quantity_raw(&existing.measurement_type, new_points);
+    // Recompute the calibrated quantity for the NEW geometry — a stale
+    // quantity_real surviving a geometry edit is silent financial corruption.
+    let quantity_real = compute_quantity_real(
+        &pool,
+        &existing.measurement_type,
+        quantity_raw,
+        existing.calibration_id,
+        new_uom,
+    )
+    .await;
 
     // Get previous version id for supersedes link
     let prev_version_id: Option<Uuid> = sqlx::query_scalar(
@@ -394,11 +410,11 @@ pub async fn update_measurement(
     .await
     .unwrap_or(None);
 
-    // Update materialized state
+    // Update materialized state (both raw and recomputed real quantities)
     let updated = sqlx::query_as::<_, Measurement>(
         r#"
         UPDATE measurements SET
-            points = $2, value = $3, quantity_raw = $3,
+            points = $2, value = $3, quantity_raw = $3, quantity_real = $8,
             cost_code = COALESCE($4, cost_code),
             label = COALESCE($5, label),
             uom = COALESCE($6, uom),
@@ -414,6 +430,7 @@ pub async fn update_measurement(
     .bind(body.label.as_deref())
     .bind(body.uom.as_deref())
     .bind(new_version_number)
+    .bind(quantity_real)
     .fetch_optional(&pool)
     .await
     .unwrap_or(None);
@@ -434,7 +451,7 @@ pub async fn update_measurement(
     .bind(sqlx::types::Json(new_points))
     .bind(existing.calibration_id)
     .bind(quantity_raw)
-    .bind(existing.quantity_real) // TODO: recompute with calibration
+    .bind(quantity_real)
     .bind(new_uom)
     .bind(sqlx::types::Json(&serde_json::json!({
         "label": body.label.as_deref().unwrap_or(existing.label.as_deref().unwrap_or("")),
@@ -561,6 +578,57 @@ pub async fn list_events(
 // ============================================================
 // Server-side quantity computation (mirrors pdf-engine logic)
 // ============================================================
+
+/// Compute the calibrated real-world quantity (Spec §6), rounded per §10.
+/// Counts are unit-independent and never require calibration. Linear scales
+/// by scale_factor; area by scale_factor². Returns None when uncalibrated (§5).
+async fn compute_quantity_real(
+    pool: &PgPool,
+    measurement_type: &crate::models::MeasurementType,
+    quantity_raw: f64,
+    calibration_id: Option<Uuid>,
+    uom: &str,
+) -> Option<f64> {
+    use crate::models::MeasurementType as MT;
+
+    if matches!(measurement_type, MT::Count) {
+        return Some(quantity_raw);
+    }
+    if matches!(measurement_type, MT::Volume) {
+        // Volume deferred in MVP (Spec §6 placeholder)
+        return None;
+    }
+
+    let scale_factor: Option<f64> = match calibration_id {
+        Some(id) => sqlx::query_scalar(
+            "SELECT scale_factor FROM scale_calibrations WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None),
+        None => None,
+    };
+    let sf = scale_factor.filter(|s| *s > 0.0)?;
+
+    let real = match measurement_type {
+        MT::Area => quantity_raw * sf * sf,
+        _ => quantity_raw * sf,
+    };
+    Some(round_quantity(real, uom))
+}
+
+/// Round a quantity to the precision defined for its unit of measure (Spec §10).
+/// Mirrors UOM_PRECISION in @openbuild/types so app and exports agree.
+fn round_quantity(value: f64, uom: &str) -> f64 {
+    let precision: i32 = match uom.to_lowercase().as_str() {
+        "ea" | "lb" | "gal" | "mm" => 0,
+        "m" => 3,
+        _ => 2,
+    };
+    let factor = 10f64.powi(precision);
+    (value * factor).round() / factor
+}
 
 fn compute_quantity_raw(
     measurement_type: &crate::models::MeasurementType,

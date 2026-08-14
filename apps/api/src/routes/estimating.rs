@@ -143,22 +143,25 @@ pub async fn create_line_item(
                 .unwrap_or(None);
 
                 if let Some(version_id) = latest_version_id {
-                    // Get the measurement's quantity for the snapshot
-                    let qty: Option<f64> = sqlx::query_scalar(
-                        "SELECT COALESCE(quantity_real, quantity_raw) FROM measurements WHERE id = $1"
+                    // Snapshot the CALIBRATED quantity only (Spec §5, §11).
+                    // quantity_raw is in PDF_PT — pricing it as a real-world
+                    // quantity would silently inflate the estimate. An
+                    // uncalibrated measurement must not drive pricing.
+                    let row: Option<(Option<f64>, String)> = sqlx::query_as(
+                        "SELECT quantity_real, uom FROM measurements WHERE id = $1 AND deleted_at IS NULL"
                     )
                     .bind(measurement_id)
                     .fetch_optional(&pool)
                     .await
                     .unwrap_or(None);
 
-                    let uom: Option<String> = sqlx::query_scalar(
-                        "SELECT uom FROM measurements WHERE id = $1"
-                    )
-                    .bind(measurement_id)
-                    .fetch_optional(&pool)
-                    .await
-                    .unwrap_or(None);
+                    let Some((Some(qty), uom)) = row else {
+                        tracing::warn!(
+                            "skipping driven link to uncalibrated or missing measurement {}",
+                            measurement_id
+                        );
+                        continue;
+                    };
 
                     sqlx::query(
                         r#"
@@ -172,8 +175,8 @@ pub async fn create_line_item(
                     .bind(item_id)
                     .bind(measurement_id)
                     .bind(version_id)
-                    .bind(qty.unwrap_or(0.0))
-                    .bind(uom.as_deref().unwrap_or(""))
+                    .bind(qty)
+                    .bind(&uom)
                     .bind(user_id)
                     .execute(&pool)
                     .await

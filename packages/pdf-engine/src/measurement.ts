@@ -101,6 +101,9 @@ export function computeQuantityReal(
   quantityRaw: number,
   calibration: Calibration | null
 ): number | null {
+  // Counts are unit-independent — they need no calibration
+  if (type === "count") return quantityRaw;
+
   if (!calibration || calibration.scaleFactor === 0) return null;
 
   switch (type) {
@@ -110,10 +113,9 @@ export function computeQuantityReal(
     case "area":
       // Area scales by factor²
       return quantityRaw * calibration.scaleFactor * calibration.scaleFactor;
-    case "count":
-      // Counts are unit-independent
-      return quantityRaw;
     case "volume":
+      return null;
+    default:
       return null;
   }
 }
