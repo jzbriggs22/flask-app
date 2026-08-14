@@ -8,6 +8,7 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod error;
 mod routes;
 mod models;
 mod services;
@@ -40,6 +41,19 @@ async fn main() {
 
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(20)
+        .after_connect(|conn, _meta| {
+            Box::pin(async move {
+                // Auth stub: single-tenant System org until JWT middleware
+                // lands. The RLS policies (migration 004) key on this
+                // setting, so tenant isolation is enforced in the database
+                // as well as in the org-scoped route queries. With real
+                // auth this moves to per-request SET LOCAL in a middleware.
+                sqlx::query("SET app.current_org_id = '00000000-0000-0000-0000-000000000000'")
+                    .execute(&mut *conn)
+                    .await?;
+                Ok(())
+            })
+        })
         .connect(&database_url)
         .await
         .expect("Failed to connect to database");

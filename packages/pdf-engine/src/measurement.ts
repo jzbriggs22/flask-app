@@ -13,7 +13,6 @@ import type {
   WorldPoint,
   MeasurementType,
   Calibration,
-  UOM_PRECISION,
 } from "@openbuild/types";
 
 // Re-export the precision table so callers don't need a separate import

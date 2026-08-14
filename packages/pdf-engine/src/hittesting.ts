@@ -13,7 +13,6 @@
 
 import type {
   WorldPoint,
-  ScreenPoint,
   TransformState,
   Measurement,
   MeasurementType,

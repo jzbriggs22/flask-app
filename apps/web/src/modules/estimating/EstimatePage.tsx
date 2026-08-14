@@ -16,15 +16,13 @@ import { Plus, Download, Trash2, AlertTriangle, Link2, RefreshCw } from "lucide-
 import { PageHeader } from "@/components/AppLayout";
 import { useProjectStore } from "@/stores/projectStore";
 import { CSI_DIVISIONS } from "@openbuild/cost-codes";
-import { roundQuantity } from "@openbuild/pdf-engine";
 
 export function EstimatePage() {
   const { projectId, estimateId } = useParams<{
     projectId: string;
     estimateId: string;
   }>();
-  const { projects, addLineItem, removeLineItem, updateLineItem } =
-    useProjectStore();
+  const { projects, addLineItem, removeLineItem } = useProjectStore();
 
   const project = projects.find((p) => p.id === projectId);
   const estimate = project?.estimates.find((e) => e.id === estimateId);
@@ -70,9 +68,7 @@ export function EstimatePage() {
   );
 
   // Count stale items (Spec §11)
-  const staleCount = estimate.lineItems.filter(
-    (item) => "isStale" in item && item.isStale
-  ).length;
+  const staleCount = estimate.lineItems.filter((item) => item.isStale).length;
 
   const formatCurrency = (cents: number) =>
     `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
@@ -120,10 +116,10 @@ export function EstimatePage() {
             <p className="text-xs font-medium text-gray-500">Source</p>
             <div className="mt-1 flex gap-2 text-xs">
               <span className="rounded bg-gray-100 px-1.5 py-0.5 font-medium text-gray-600">
-                {estimate.lineItems.filter((i) => !("sourceType" in i) || (i as Record<string,unknown>).sourceType === "manual").length} manual
+                {estimate.lineItems.filter((i) => (i.sourceType ?? "manual") === "manual").length} manual
               </span>
               <span className="rounded bg-blue-100 px-1.5 py-0.5 font-medium text-blue-600">
-                {estimate.lineItems.filter((i) => "sourceType" in i && (i as Record<string,unknown>).sourceType === "driven").length} driven
+                {estimate.lineItems.filter((i) => i.sourceType === "driven").length} driven
               </span>
             </div>
           </div>
@@ -146,10 +142,8 @@ export function EstimatePage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {estimate.lineItems.map((item) => {
-                const isStale = "isStale" in item && item.isStale;
-                const sourceType = "sourceType" in item
-                  ? (item as Record<string,unknown>).sourceType
-                  : "manual";
+                const isStale = item.isStale ?? false;
+                const sourceType = item.sourceType ?? "manual";
                 return (
                   <tr
                     key={item.id}

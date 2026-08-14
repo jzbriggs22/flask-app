@@ -9,6 +9,10 @@ export interface LineItem {
   unit: string;
   /** Unit cost in cents — never use floating point for money */
   unitCostCents: number;
+  /** "manual" entry or "driven" from takeoff measurements (Spec §11) */
+  sourceType?: "manual" | "driven";
+  /** True if source measurements changed since the snapshot (Spec §11) */
+  isStale?: boolean;
   createdAt: string;
 }
 

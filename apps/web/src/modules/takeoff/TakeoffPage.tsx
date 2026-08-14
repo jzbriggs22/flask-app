@@ -73,9 +73,6 @@ export function TakeoffPage() {
   const project = projects.find((p) => p.id === projectId);
   const drawingSet = project?.drawingSets.find((ds) => ds.id === drawingSetId);
   const [showLayers, setShowLayers] = useState(true);
-  const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
-  const [calibrationDistance, setCalibrationDistance] = useState("");
-  const [calibrationUnit, setCalibrationUnit] = useState<"ft" | "in" | "m" | "mm">("ft");
 
   if (!project || !drawingSet) {
     return (

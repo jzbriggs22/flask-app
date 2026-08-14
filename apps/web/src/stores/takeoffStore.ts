@@ -15,19 +15,13 @@ import { create } from "zustand";
 import { v4 as uuid } from "uuid";
 import type {
   WorldPoint,
-  ScreenPoint,
   TransformState,
   Measurement,
   MeasurementType,
   MeasurementVersion,
-  MeasurementMetadata,
   TakeoffLayer,
   Calibration,
   CalibrationStatus,
-  CalibrationConfidence,
-  CalibrationMethod,
-  DisplayUnit,
-  UnitSystem,
   TakeoffEvent,
   TakeoffEventType,
   SnapConfig,
@@ -38,7 +32,6 @@ import {
   computeQuantityRaw,
   computeQuantityReal,
   roundQuantity,
-  computeCalibration,
 } from "@openbuild/pdf-engine";
 
 export type MeasurementTool = "select" | "linear" | "area" | "count" | "calibrate";

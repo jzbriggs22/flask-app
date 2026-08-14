@@ -1,11 +1,5 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
-import {
-  FolderOpen,
-  Ruler,
-  Calculator,
-  Settings,
-  Building2,
-} from "lucide-react";
+import { FolderOpen, Settings, Building2 } from "lucide-react";
 
 const navItems = [
   { path: "/projects", label: "Projects", icon: FolderOpen },

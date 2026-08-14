@@ -21,10 +21,9 @@ import type {
   Measurement,
   SnapConfig,
   SnapTarget,
-  SnapTargetType,
 } from "@openbuild/types";
 import { screenToWorld, worldToScreen } from "./transforms";
-import { midpoint, distanceBetween } from "./measurement";
+import { midpoint } from "./measurement";
 
 /**
  * A candidate snap point with its screen projection.

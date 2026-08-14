@@ -2,6 +2,14 @@ use anyhow::Result;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::SaltString;
+use uuid::Uuid;
+
+/// Auth context stub — until JWT middleware lands, every request acts as
+/// the seeded System organization and user (migration 003). Route handlers
+/// scope all queries by SYSTEM_ORG_ID; when real auth arrives these become
+/// per-request values extracted from the token, and nothing else changes.
+pub const SYSTEM_ORG_ID: Uuid = Uuid::nil();
+pub const SYSTEM_USER_ID: Uuid = Uuid::nil();
 
 /// Hash a password using Argon2id.
 pub fn hash_password(password: &str) -> Result<String> {

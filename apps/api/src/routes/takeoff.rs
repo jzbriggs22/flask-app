@@ -5,12 +5,87 @@ use axum::{
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::error::{ApiError, ApiResult};
 use crate::models::{
     DrawingSet, DrawingSheetRevision, TakeoffLayer, Measurement, MeasurementVersion,
-    ScaleCalibration, TakeoffEvent, TakeoffEventType,
+    ScaleCalibration, TakeoffEvent,
     CreateDrawingSetRequest, CreateLayerRequest, CreateMeasurementRequest,
     CreateCalibrationRequest, UpdateMeasurementRequest, WorldPoint,
 };
+use crate::services::auth::{SYSTEM_ORG_ID, SYSTEM_USER_ID};
+
+// ============================================================
+// Org-scoping helpers (multi-tenant isolation)
+// ============================================================
+
+async fn assert_project_in_org(pool: &PgPool, project_id: Uuid) -> Result<(), ApiError> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL)"
+    )
+    .bind(project_id)
+    .bind(SYSTEM_ORG_ID)
+    .fetch_one(pool)
+    .await?;
+
+    if exists { Ok(()) } else { Err(ApiError::not_found("Project")) }
+}
+
+async fn assert_drawing_set_in_org(pool: &PgPool, drawing_set_id: Uuid) -> Result<(), ApiError> {
+    let exists: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM drawing_sets ds
+            JOIN projects p ON p.id = ds.project_id
+            WHERE ds.id = $1 AND p.organization_id = $2 AND p.deleted_at IS NULL
+        )
+        "#,
+    )
+    .bind(drawing_set_id)
+    .bind(SYSTEM_ORG_ID)
+    .fetch_one(pool)
+    .await?;
+
+    if exists { Ok(()) } else { Err(ApiError::not_found("Drawing set")) }
+}
+
+async fn assert_layer_in_org(pool: &PgPool, layer_id: Uuid) -> Result<(), ApiError> {
+    let exists: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM takeoff_layers tl
+            JOIN drawing_sets ds ON ds.id = tl.drawing_set_id
+            JOIN projects p ON p.id = ds.project_id
+            WHERE tl.id = $1 AND p.organization_id = $2 AND p.deleted_at IS NULL
+        )
+        "#,
+    )
+    .bind(layer_id)
+    .bind(SYSTEM_ORG_ID)
+    .fetch_one(pool)
+    .await?;
+
+    if exists { Ok(()) } else { Err(ApiError::not_found("Layer")) }
+}
+
+async fn assert_measurement_in_org(pool: &PgPool, measurement_id: Uuid) -> Result<(), ApiError> {
+    let exists: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM measurements m
+            JOIN takeoff_layers tl ON tl.id = m.layer_id
+            JOIN drawing_sets ds ON ds.id = tl.drawing_set_id
+            JOIN projects p ON p.id = ds.project_id
+            WHERE m.id = $1 AND p.organization_id = $2 AND p.deleted_at IS NULL
+        )
+        "#,
+    )
+    .bind(measurement_id)
+    .bind(SYSTEM_ORG_ID)
+    .fetch_one(pool)
+    .await?;
+
+    if exists { Ok(()) } else { Err(ApiError::not_found("Measurement")) }
+}
 
 // ============================================================
 // Drawing Sets
@@ -20,16 +95,21 @@ use crate::models::{
 pub async fn list_drawing_sets(
     State(pool): State<PgPool>,
     Path(project_id): Path<Uuid>,
-) -> Json<Vec<DrawingSet>> {
+) -> ApiResult<Vec<DrawingSet>> {
     let sets = sqlx::query_as::<_, DrawingSet>(
-        "SELECT * FROM drawing_sets WHERE project_id = $1 ORDER BY created_at DESC"
+        r#"
+        SELECT ds.* FROM drawing_sets ds
+        JOIN projects p ON p.id = ds.project_id
+        WHERE ds.project_id = $1 AND p.organization_id = $2 AND p.deleted_at IS NULL
+        ORDER BY ds.created_at DESC
+        "#,
     )
     .bind(project_id)
+    .bind(SYSTEM_ORG_ID)
     .fetch_all(&pool)
-    .await
-    .unwrap_or_default();
+    .await?;
 
-    Json(sets)
+    Ok(Json(sets))
 }
 
 /// POST /api/projects/:project_id/drawing-sets
@@ -37,7 +117,9 @@ pub async fn upload_drawing_set(
     State(pool): State<PgPool>,
     Path(project_id): Path<Uuid>,
     Json(body): Json<CreateDrawingSetRequest>,
-) -> Json<DrawingSet> {
+) -> ApiResult<DrawingSet> {
+    assert_project_in_org(&pool, project_id).await?;
+
     // TODO: Handle multipart file upload to S3/MinIO
     let set = sqlx::query_as::<_, DrawingSet>(
         r#"
@@ -49,28 +131,33 @@ pub async fn upload_drawing_set(
     .bind(Uuid::new_v4())
     .bind(project_id)
     .bind(&body.name)
-    .bind(Uuid::nil()) // TODO: get from auth context
+    .bind(SYSTEM_USER_ID)
     .fetch_one(&pool)
-    .await
-    .expect("Failed to create drawing set");
+    .await?;
 
-    Json(set)
+    Ok(Json(set))
 }
 
 /// GET /api/projects/:project_id/drawing-sets/:id
 pub async fn get_drawing_set(
     State(pool): State<PgPool>,
-    Path((_project_id, id)): Path<(Uuid, Uuid)>,
-) -> Json<Option<DrawingSet>> {
+    Path((project_id, id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<DrawingSet> {
     let set = sqlx::query_as::<_, DrawingSet>(
-        "SELECT * FROM drawing_sets WHERE id = $1"
+        r#"
+        SELECT ds.* FROM drawing_sets ds
+        JOIN projects p ON p.id = ds.project_id
+        WHERE ds.id = $1 AND ds.project_id = $2 AND p.organization_id = $3 AND p.deleted_at IS NULL
+        "#,
     )
     .bind(id)
+    .bind(project_id)
+    .bind(SYSTEM_ORG_ID)
     .fetch_optional(&pool)
-    .await
-    .unwrap_or(None);
+    .await?
+    .ok_or_else(|| ApiError::not_found("Drawing set"))?;
 
-    Json(set)
+    Ok(Json(set))
 }
 
 // ============================================================
@@ -81,16 +168,22 @@ pub async fn get_drawing_set(
 pub async fn list_sheet_revisions(
     State(pool): State<PgPool>,
     Path(sheet_id): Path<Uuid>,
-) -> Json<Vec<DrawingSheetRevision>> {
+) -> ApiResult<Vec<DrawingSheetRevision>> {
     let revisions = sqlx::query_as::<_, DrawingSheetRevision>(
-        "SELECT * FROM drawing_sheet_revisions WHERE sheet_id = $1 ORDER BY revision_number DESC"
+        r#"
+        SELECT r.* FROM drawing_sheet_revisions r
+        JOIN drawing_sets ds ON ds.id = r.drawing_set_id
+        JOIN projects p ON p.id = ds.project_id
+        WHERE r.sheet_id = $1 AND p.organization_id = $2 AND p.deleted_at IS NULL
+        ORDER BY r.revision_number DESC
+        "#,
     )
     .bind(sheet_id)
+    .bind(SYSTEM_ORG_ID)
     .fetch_all(&pool)
-    .await
-    .unwrap_or_default();
+    .await?;
 
-    Json(revisions)
+    Ok(Json(revisions))
 }
 
 // ============================================================
@@ -98,19 +191,28 @@ pub async fn list_sheet_revisions(
 // ============================================================
 
 /// GET /api/sheet-revisions/:revision_id/calibration
+/// A missing calibration is a legitimate state (uncalibrated sheet, §5),
+/// so this returns 200 with null rather than 404.
 pub async fn get_calibration(
     State(pool): State<PgPool>,
     Path(revision_id): Path<Uuid>,
-) -> Json<Option<ScaleCalibration>> {
+) -> ApiResult<Option<ScaleCalibration>> {
     let cal = sqlx::query_as::<_, ScaleCalibration>(
-        "SELECT * FROM scale_calibrations WHERE sheet_revision_id = $1 ORDER BY created_at DESC LIMIT 1"
+        r#"
+        SELECT c.* FROM scale_calibrations c
+        JOIN drawing_sheet_revisions r ON r.id = c.sheet_revision_id
+        JOIN drawing_sets ds ON ds.id = r.drawing_set_id
+        JOIN projects p ON p.id = ds.project_id
+        WHERE c.sheet_revision_id = $1 AND p.organization_id = $2
+        ORDER BY c.created_at DESC LIMIT 1
+        "#,
     )
     .bind(revision_id)
+    .bind(SYSTEM_ORG_ID)
     .fetch_optional(&pool)
-    .await
-    .unwrap_or(None);
+    .await?;
 
-    Json(cal)
+    Ok(Json(cal))
 }
 
 /// POST /api/sheet-revisions/:revision_id/calibration
@@ -118,25 +220,40 @@ pub async fn set_calibration(
     State(pool): State<PgPool>,
     Path(revision_id): Path<Uuid>,
     Json(body): Json<CreateCalibrationRequest>,
-) -> Json<ScaleCalibration> {
+) -> ApiResult<ScaleCalibration> {
+    if body.real_distance <= 0.0 {
+        return Err(ApiError::unprocessable(
+            "INVALID_CALIBRATION",
+            "real_distance must be positive",
+        ));
+    }
+
     // Compute world_distance_pt and scale_factor from the two points
     let dx = body.point2_x - body.point1_x;
     let dy = body.point2_y - body.point1_y;
     let world_distance_pt = (dx * dx + dy * dy).sqrt();
-    let scale_factor = if world_distance_pt > 0.0 {
-        body.real_distance / world_distance_pt
-    } else {
-        0.0
-    };
+    if world_distance_pt <= 0.0 {
+        return Err(ApiError::unprocessable(
+            "INVALID_CALIBRATION",
+            "calibration points must be distinct",
+        ));
+    }
+    let scale_factor = body.real_distance / world_distance_pt;
 
-    // Get sheet_id from revision
+    // Get the revision (org-scoped)
     let revision = sqlx::query_as::<_, DrawingSheetRevision>(
-        "SELECT * FROM drawing_sheet_revisions WHERE id = $1"
+        r#"
+        SELECT r.* FROM drawing_sheet_revisions r
+        JOIN drawing_sets ds ON ds.id = r.drawing_set_id
+        JOIN projects p ON p.id = ds.project_id
+        WHERE r.id = $1 AND p.organization_id = $2 AND p.deleted_at IS NULL
+        "#,
     )
     .bind(revision_id)
-    .fetch_one(&pool)
-    .await
-    .expect("Sheet revision not found");
+    .bind(SYSTEM_ORG_ID)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or_else(|| ApiError::not_found("Sheet revision"))?;
 
     let cal = sqlx::query_as::<_, ScaleCalibration>(
         r#"
@@ -169,12 +286,11 @@ pub async fn set_calibration(
     .bind(body.method.as_deref().unwrap_or("two-point"))
     .bind(body.confidence.as_deref().unwrap_or("exact"))
     .bind(&body.display_unit)
-    .bind(Uuid::nil()) // TODO: get from auth context
+    .bind(SYSTEM_USER_ID)
     .fetch_one(&pool)
-    .await
-    .expect("Failed to create calibration");
+    .await?;
 
-    Json(cal)
+    Ok(Json(cal))
 }
 
 // ============================================================
@@ -185,16 +301,22 @@ pub async fn set_calibration(
 pub async fn list_layers(
     State(pool): State<PgPool>,
     Path(drawing_set_id): Path<Uuid>,
-) -> Json<Vec<TakeoffLayer>> {
+) -> ApiResult<Vec<TakeoffLayer>> {
     let layers = sqlx::query_as::<_, TakeoffLayer>(
-        "SELECT * FROM takeoff_layers WHERE drawing_set_id = $1 ORDER BY sort_order"
+        r#"
+        SELECT tl.* FROM takeoff_layers tl
+        JOIN drawing_sets ds ON ds.id = tl.drawing_set_id
+        JOIN projects p ON p.id = ds.project_id
+        WHERE tl.drawing_set_id = $1 AND p.organization_id = $2 AND p.deleted_at IS NULL
+        ORDER BY tl.sort_order
+        "#,
     )
     .bind(drawing_set_id)
+    .bind(SYSTEM_ORG_ID)
     .fetch_all(&pool)
-    .await
-    .unwrap_or_default();
+    .await?;
 
-    Json(layers)
+    Ok(Json(layers))
 }
 
 /// POST /api/drawing-sets/:drawing_set_id/layers
@@ -202,7 +324,9 @@ pub async fn create_layer(
     State(pool): State<PgPool>,
     Path(drawing_set_id): Path<Uuid>,
     Json(body): Json<CreateLayerRequest>,
-) -> Json<TakeoffLayer> {
+) -> ApiResult<TakeoffLayer> {
+    assert_drawing_set_in_org(&pool, drawing_set_id).await?;
+
     let layer = sqlx::query_as::<_, TakeoffLayer>(
         r#"
         INSERT INTO takeoff_layers (id, drawing_set_id, name, color, cost_code, visible, sort_order, created_at)
@@ -216,10 +340,9 @@ pub async fn create_layer(
     .bind(&body.color)
     .bind(body.cost_code.as_deref().unwrap_or(""))
     .fetch_one(&pool)
-    .await
-    .expect("Failed to create layer");
+    .await?;
 
-    Json(layer)
+    Ok(Json(layer))
 }
 
 // ============================================================
@@ -231,28 +354,39 @@ pub async fn create_layer(
 pub async fn list_measurements(
     State(pool): State<PgPool>,
     Path(layer_id): Path<Uuid>,
-) -> Json<Vec<Measurement>> {
+) -> ApiResult<Vec<Measurement>> {
     let measurements = sqlx::query_as::<_, Measurement>(
-        "SELECT * FROM measurements WHERE layer_id = $1 AND deleted_at IS NULL ORDER BY created_at"
+        r#"
+        SELECT m.* FROM measurements m
+        JOIN takeoff_layers tl ON tl.id = m.layer_id
+        JOIN drawing_sets ds ON ds.id = tl.drawing_set_id
+        JOIN projects p ON p.id = ds.project_id
+        WHERE m.layer_id = $1 AND m.deleted_at IS NULL
+          AND p.organization_id = $2 AND p.deleted_at IS NULL
+        ORDER BY m.created_at
+        "#,
     )
     .bind(layer_id)
+    .bind(SYSTEM_ORG_ID)
     .fetch_all(&pool)
-    .await
-    .unwrap_or_default();
+    .await?;
 
-    Json(measurements)
+    Ok(Json(measurements))
 }
 
 /// POST /api/layers/:layer_id/measurements
-/// Creates a measurement + initial version + MEASUREMENT_CREATED event (Spec §9).
+/// Creates a measurement + initial version + MEASUREMENT_CREATED event (Spec §9),
+/// atomically.
 pub async fn create_measurement(
     State(pool): State<PgPool>,
     Path(layer_id): Path<Uuid>,
     Json(body): Json<CreateMeasurementRequest>,
-) -> Json<Measurement> {
+) -> ApiResult<Measurement> {
+    assert_layer_in_org(&pool, layer_id).await?;
+
     let measurement_id = Uuid::new_v4();
     let version_id = Uuid::new_v4();
-    let user_id = Uuid::nil(); // TODO: get from auth context
+    let user_id = SYSTEM_USER_ID;
 
     // Compute quantities server-side from WORLD geometry (Spec §6)
     let quantity_raw = compute_quantity_raw(&body.measurement_type, &body.points);
@@ -263,15 +397,12 @@ pub async fn create_measurement(
         body.calibration_id,
         &body.uom,
     )
-    .await;
+    .await?;
 
     // Measurement + version + event must land atomically (Spec §9):
     // a measurement without its version record or audit event would
     // silently diverge the materialized state from history.
-    let mut tx = pool
-        .begin()
-        .await
-        .expect("Failed to begin transaction");
+    let mut tx = pool.begin().await.map_err(ApiError::from)?;
 
     // Insert measurement (materialized state)
     let measurement = sqlx::query_as::<_, Measurement>(
@@ -306,8 +437,7 @@ pub async fn create_measurement(
     .bind(&body.uom)
     .bind(user_id)
     .fetch_one(&mut *tx)
-    .await
-    .expect("Failed to create measurement");
+    .await?;
 
     // Insert initial version (Spec §9: append-only)
     let metadata = serde_json::json!({
@@ -333,8 +463,7 @@ pub async fn create_measurement(
     .bind(sqlx::types::Json(&metadata))
     .bind(user_id)
     .execute(&mut *tx)
-    .await
-    .expect("Failed to record measurement version");
+    .await?;
 
     // Insert event (Spec §9: append-only audit log)
     sqlx::query(
@@ -364,14 +493,11 @@ pub async fn create_measurement(
     })))
     .bind(user_id)
     .execute(&mut *tx)
-    .await
-    .expect("Failed to record takeoff event");
+    .await?;
 
-    tx.commit()
-        .await
-        .expect("Failed to commit measurement transaction");
+    tx.commit().await.map_err(ApiError::from)?;
 
-    Json(measurement)
+    Ok(Json(measurement))
 }
 
 /// PUT /api/measurements/:id — update creates a new version (Spec §9).
@@ -379,28 +505,23 @@ pub async fn update_measurement(
     State(pool): State<PgPool>,
     Path(measurement_id): Path<Uuid>,
     Json(body): Json<UpdateMeasurementRequest>,
-) -> Json<Option<Measurement>> {
-    let user_id = Uuid::nil(); // TODO: get from auth context
+) -> ApiResult<Measurement> {
+    assert_measurement_in_org(&pool, measurement_id).await?;
+
+    let user_id = SYSTEM_USER_ID;
 
     // The read-modify-write must be atomic (Spec §9). FOR UPDATE serializes
     // concurrent edits so two users can't both claim the same version_number;
     // the loser blocks, then re-reads the winner's committed version.
-    let mut tx = pool
-        .begin()
-        .await
-        .expect("Failed to begin transaction");
+    let mut tx = pool.begin().await.map_err(ApiError::from)?;
 
     let existing = sqlx::query_as::<_, Measurement>(
         "SELECT * FROM measurements WHERE id = $1 AND deleted_at IS NULL FOR UPDATE"
     )
     .bind(measurement_id)
     .fetch_optional(&mut *tx)
-    .await
-    .expect("Failed to load measurement");
-
-    let Some(existing) = existing else {
-        return Json(None);
-    };
+    .await?
+    .ok_or_else(|| ApiError::not_found("Measurement"))?;
 
     let new_version_number = existing.version + 1;
     let version_id = Uuid::new_v4();
@@ -418,7 +539,7 @@ pub async fn update_measurement(
         existing.calibration_id,
         new_uom,
     )
-    .await;
+    .await?;
 
     // Get previous version id for supersedes link
     let prev_version_id: Option<Uuid> = sqlx::query_scalar(
@@ -426,8 +547,7 @@ pub async fn update_measurement(
     )
     .bind(measurement_id)
     .fetch_optional(&mut *tx)
-    .await
-    .expect("Failed to load previous version");
+    .await?;
 
     // Update materialized state (both raw and recomputed real quantities)
     let updated = sqlx::query_as::<_, Measurement>(
@@ -451,13 +571,8 @@ pub async fn update_measurement(
     .bind(new_version_number)
     .bind(quantity_real)
     .fetch_optional(&mut *tx)
-    .await
-    .expect("Failed to update measurement");
-
-    let Some(updated) = updated else {
-        // Deleted between our FOR UPDATE read and the update — nothing to version.
-        return Json(None);
-    };
+    .await?
+    .ok_or_else(|| ApiError::not_found("Measurement"))?;
 
     // Insert new version (Spec §9: append-only, prior versions immutable)
     sqlx::query(
@@ -484,8 +599,7 @@ pub async fn update_measurement(
     .bind(user_id)
     .bind(prev_version_id)
     .execute(&mut *tx)
-    .await
-    .expect("Failed to record measurement version");
+    .await?;
 
     // Insert MEASUREMENT_UPDATED event
     sqlx::query(
@@ -518,32 +632,33 @@ pub async fn update_measurement(
     })))
     .bind(user_id)
     .execute(&mut *tx)
-    .await
-    .expect("Failed to record takeoff event");
+    .await?;
 
-    tx.commit()
-        .await
-        .expect("Failed to commit measurement update");
+    tx.commit().await.map_err(ApiError::from)?;
 
-    Json(Some(updated))
+    Ok(Json(updated))
 }
 
 /// DELETE /api/measurements/:id — soft delete (Spec §9).
 pub async fn soft_delete_measurement(
     State(pool): State<PgPool>,
     Path(measurement_id): Path<Uuid>,
-) -> Json<serde_json::Value> {
-    // Delete + audit event must land atomically (Spec §9)
-    let mut tx = pool
-        .begin()
-        .await
-        .expect("Failed to begin transaction");
+) -> ApiResult<serde_json::Value> {
+    assert_measurement_in_org(&pool, measurement_id).await?;
 
-    sqlx::query("UPDATE measurements SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL")
-        .bind(measurement_id)
-        .execute(&mut *tx)
-        .await
-        .expect("Failed to delete measurement");
+    // Delete + audit event must land atomically (Spec §9)
+    let mut tx = pool.begin().await.map_err(ApiError::from)?;
+
+    let result = sqlx::query(
+        "UPDATE measurements SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL"
+    )
+    .bind(measurement_id)
+    .execute(&mut *tx)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found("Measurement"));
+    }
 
     // Insert MEASUREMENT_DELETED event
     sqlx::query(
@@ -565,32 +680,30 @@ pub async fn soft_delete_measurement(
     )
     .bind(Uuid::new_v4())
     .bind(measurement_id)
-    .bind(Uuid::nil()) // TODO: get from auth context
+    .bind(SYSTEM_USER_ID)
     .execute(&mut *tx)
-    .await
-    .expect("Failed to record takeoff event");
+    .await?;
 
-    tx.commit()
-        .await
-        .expect("Failed to commit measurement delete");
+    tx.commit().await.map_err(ApiError::from)?;
 
-    Json(serde_json::json!({ "deleted": true }))
+    Ok(Json(serde_json::json!({ "deleted": true })))
 }
 
 /// GET /api/measurements/:id/versions — version history (Spec §9).
 pub async fn list_measurement_versions(
     State(pool): State<PgPool>,
     Path(measurement_id): Path<Uuid>,
-) -> Json<Vec<MeasurementVersion>> {
+) -> ApiResult<Vec<MeasurementVersion>> {
+    assert_measurement_in_org(&pool, measurement_id).await?;
+
     let versions = sqlx::query_as::<_, MeasurementVersion>(
         "SELECT * FROM measurement_versions WHERE measurement_id = $1 ORDER BY version_number"
     )
     .bind(measurement_id)
     .fetch_all(&pool)
-    .await
-    .unwrap_or_default();
+    .await?;
 
-    Json(versions)
+    Ok(Json(versions))
 }
 
 // ============================================================
@@ -601,16 +714,17 @@ pub async fn list_measurement_versions(
 pub async fn list_events(
     State(pool): State<PgPool>,
     Path(project_id): Path<Uuid>,
-) -> Json<Vec<TakeoffEvent>> {
+) -> ApiResult<Vec<TakeoffEvent>> {
+    assert_project_in_org(&pool, project_id).await?;
+
     let events = sqlx::query_as::<_, TakeoffEvent>(
         "SELECT * FROM takeoff_events WHERE project_id = $1 ORDER BY created_at DESC LIMIT 100"
     )
     .bind(project_id)
     .fetch_all(&pool)
-    .await
-    .unwrap_or_default();
+    .await?;
 
-    Json(events)
+    Ok(Json(events))
 }
 
 // ============================================================
@@ -626,15 +740,15 @@ async fn compute_quantity_real(
     quantity_raw: f64,
     calibration_id: Option<Uuid>,
     uom: &str,
-) -> Option<f64> {
+) -> Result<Option<f64>, ApiError> {
     use crate::models::MeasurementType as MT;
 
     if matches!(measurement_type, MT::Count) {
-        return Some(quantity_raw);
+        return Ok(Some(quantity_raw));
     }
     if matches!(measurement_type, MT::Volume) {
         // Volume deferred in MVP (Spec §6 placeholder)
-        return None;
+        return Ok(None);
     }
 
     let scale_factor: Option<f64> = match calibration_id {
@@ -643,17 +757,18 @@ async fn compute_quantity_real(
         )
         .bind(id)
         .fetch_optional(pool)
-        .await
-        .unwrap_or(None),
+        .await?,
         None => None,
     };
-    let sf = scale_factor.filter(|s| *s > 0.0)?;
+    let Some(sf) = scale_factor.filter(|s| *s > 0.0) else {
+        return Ok(None);
+    };
 
     let real = match measurement_type {
         MT::Area => quantity_raw * sf * sf,
         _ => quantity_raw * sf,
     };
-    Some(round_quantity(real, uom))
+    Ok(Some(round_quantity(real, uom)))
 }
 
 /// Round a quantity to the precision defined for its unit of measure (Spec §10).
