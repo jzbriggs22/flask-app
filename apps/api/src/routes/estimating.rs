@@ -101,6 +101,13 @@ pub async fn create_line_item(
             (None, None)
         };
 
+    // Line item + its measurement source links must land atomically (§11):
+    // a driven item without its source records loses traceability.
+    let mut tx = pool
+        .begin()
+        .await
+        .expect("Failed to begin transaction");
+
     let item = sqlx::query_as::<_, EstimateLineItem>(
         r#"
         INSERT INTO estimate_line_items (
@@ -125,7 +132,7 @@ pub async fn create_line_item(
     .bind(source_type)
     .bind(quantity_snapshot)
     .bind(snapshot_at)
-    .fetch_one(&pool)
+    .fetch_one(&mut *tx)
     .await
     .expect("Failed to create line item");
 
@@ -138,9 +145,9 @@ pub async fn create_line_item(
                     "SELECT id FROM measurement_versions WHERE measurement_id = $1 ORDER BY version_number DESC LIMIT 1"
                 )
                 .bind(measurement_id)
-                .fetch_optional(&pool)
+                .fetch_optional(&mut *tx)
                 .await
-                .unwrap_or(None);
+                .expect("Failed to load measurement version");
 
                 if let Some(version_id) = latest_version_id {
                     // Snapshot the CALIBRATED quantity only (Spec §5, §11).
@@ -151,9 +158,9 @@ pub async fn create_line_item(
                         "SELECT quantity_real, uom FROM measurements WHERE id = $1 AND deleted_at IS NULL"
                     )
                     .bind(measurement_id)
-                    .fetch_optional(&pool)
+                    .fetch_optional(&mut *tx)
                     .await
-                    .unwrap_or(None);
+                    .expect("Failed to load measurement");
 
                     let Some((Some(qty), uom)) = row else {
                         tracing::warn!(
@@ -178,13 +185,17 @@ pub async fn create_line_item(
                     .bind(qty)
                     .bind(&uom)
                     .bind(user_id)
-                    .execute(&pool)
+                    .execute(&mut *tx)
                     .await
-                    .ok();
+                    .expect("Failed to record line item source");
                 }
             }
         }
     }
+
+    tx.commit()
+        .await
+        .expect("Failed to commit line item transaction");
 
     Json(item)
 }

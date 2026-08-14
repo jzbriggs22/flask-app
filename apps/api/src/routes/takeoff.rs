@@ -265,6 +265,14 @@ pub async fn create_measurement(
     )
     .await;
 
+    // Measurement + version + event must land atomically (Spec §9):
+    // a measurement without its version record or audit event would
+    // silently diverge the materialized state from history.
+    let mut tx = pool
+        .begin()
+        .await
+        .expect("Failed to begin transaction");
+
     // Insert measurement (materialized state)
     let measurement = sqlx::query_as::<_, Measurement>(
         r#"
@@ -297,7 +305,7 @@ pub async fn create_measurement(
     .bind(quantity_real)
     .bind(&body.uom)
     .bind(user_id)
-    .fetch_one(&pool)
+    .fetch_one(&mut *tx)
     .await
     .expect("Failed to create measurement");
 
@@ -324,9 +332,9 @@ pub async fn create_measurement(
     .bind(&body.uom)
     .bind(sqlx::types::Json(&metadata))
     .bind(user_id)
-    .execute(&pool)
+    .execute(&mut *tx)
     .await
-    .ok();
+    .expect("Failed to record measurement version");
 
     // Insert event (Spec §9: append-only audit log)
     sqlx::query(
@@ -355,9 +363,13 @@ pub async fn create_measurement(
         "uom": body.uom,
     })))
     .bind(user_id)
-    .execute(&pool)
+    .execute(&mut *tx)
     .await
-    .ok();
+    .expect("Failed to record takeoff event");
+
+    tx.commit()
+        .await
+        .expect("Failed to commit measurement transaction");
 
     Json(measurement)
 }
@@ -370,14 +382,21 @@ pub async fn update_measurement(
 ) -> Json<Option<Measurement>> {
     let user_id = Uuid::nil(); // TODO: get from auth context
 
-    // Get current measurement
+    // The read-modify-write must be atomic (Spec §9). FOR UPDATE serializes
+    // concurrent edits so two users can't both claim the same version_number;
+    // the loser blocks, then re-reads the winner's committed version.
+    let mut tx = pool
+        .begin()
+        .await
+        .expect("Failed to begin transaction");
+
     let existing = sqlx::query_as::<_, Measurement>(
-        "SELECT * FROM measurements WHERE id = $1 AND deleted_at IS NULL"
+        "SELECT * FROM measurements WHERE id = $1 AND deleted_at IS NULL FOR UPDATE"
     )
     .bind(measurement_id)
-    .fetch_optional(&pool)
+    .fetch_optional(&mut *tx)
     .await
-    .unwrap_or(None);
+    .expect("Failed to load measurement");
 
     let Some(existing) = existing else {
         return Json(None);
@@ -406,9 +425,9 @@ pub async fn update_measurement(
         "SELECT id FROM measurement_versions WHERE measurement_id = $1 ORDER BY version_number DESC LIMIT 1"
     )
     .bind(measurement_id)
-    .fetch_optional(&pool)
+    .fetch_optional(&mut *tx)
     .await
-    .unwrap_or(None);
+    .expect("Failed to load previous version");
 
     // Update materialized state (both raw and recomputed real quantities)
     let updated = sqlx::query_as::<_, Measurement>(
@@ -431,9 +450,14 @@ pub async fn update_measurement(
     .bind(body.uom.as_deref())
     .bind(new_version_number)
     .bind(quantity_real)
-    .fetch_optional(&pool)
+    .fetch_optional(&mut *tx)
     .await
-    .unwrap_or(None);
+    .expect("Failed to update measurement");
+
+    let Some(updated) = updated else {
+        // Deleted between our FOR UPDATE read and the update — nothing to version.
+        return Json(None);
+    };
 
     // Insert new version (Spec §9: append-only, prior versions immutable)
     sqlx::query(
@@ -459,9 +483,9 @@ pub async fn update_measurement(
     })))
     .bind(user_id)
     .bind(prev_version_id)
-    .execute(&pool)
+    .execute(&mut *tx)
     .await
-    .ok();
+    .expect("Failed to record measurement version");
 
     // Insert MEASUREMENT_UPDATED event
     sqlx::query(
@@ -493,11 +517,15 @@ pub async fn update_measurement(
         },
     })))
     .bind(user_id)
-    .execute(&pool)
+    .execute(&mut *tx)
     .await
-    .ok();
+    .expect("Failed to record takeoff event");
 
-    Json(updated)
+    tx.commit()
+        .await
+        .expect("Failed to commit measurement update");
+
+    Json(Some(updated))
 }
 
 /// DELETE /api/measurements/:id — soft delete (Spec §9).
@@ -505,11 +533,17 @@ pub async fn soft_delete_measurement(
     State(pool): State<PgPool>,
     Path(measurement_id): Path<Uuid>,
 ) -> Json<serde_json::Value> {
-    sqlx::query("UPDATE measurements SET deleted_at = NOW() WHERE id = $1")
-        .bind(measurement_id)
-        .execute(&pool)
+    // Delete + audit event must land atomically (Spec §9)
+    let mut tx = pool
+        .begin()
         .await
-        .ok();
+        .expect("Failed to begin transaction");
+
+    sqlx::query("UPDATE measurements SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL")
+        .bind(measurement_id)
+        .execute(&mut *tx)
+        .await
+        .expect("Failed to delete measurement");
 
     // Insert MEASUREMENT_DELETED event
     sqlx::query(
@@ -532,9 +566,13 @@ pub async fn soft_delete_measurement(
     .bind(Uuid::new_v4())
     .bind(measurement_id)
     .bind(Uuid::nil()) // TODO: get from auth context
-    .execute(&pool)
+    .execute(&mut *tx)
     .await
-    .ok();
+    .expect("Failed to record takeoff event");
+
+    tx.commit()
+        .await
+        .expect("Failed to commit measurement delete");
 
     Json(serde_json::json!({ "deleted": true }))
 }
