@@ -1,7 +1,7 @@
 use axum::{extract::State, Json};
 use sqlx::PgPool;
 
-use crate::models::{CreateUserRequest, LoginRequest, AuthResponse};
+use crate::models::{CreateUserRequest, LoginRequest};
 
 /// POST /api/auth/register
 pub async fn register(

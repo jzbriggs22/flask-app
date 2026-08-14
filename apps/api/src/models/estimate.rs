@@ -44,8 +44,11 @@ pub struct EstimateLineItem {
     /// True if source measurements changed since snapshot (§11).
     pub is_stale: bool,
     pub sort_order: i32,
+    pub created_by: Uuid,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Soft delete — line items are financial records (CLAUDE.md).
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 /// Link between a line item and its source measurements (§11).

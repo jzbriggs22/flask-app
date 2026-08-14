@@ -116,6 +116,7 @@ async fn main() {
         .route("/api/estimates/:estimate_id/line-items", post(routes::estimating::create_line_item))
         .route("/api/line-items/:item_id", put(routes::estimating::update_line_item))
         .route("/api/line-items/:item_id", delete(routes::estimating::delete_line_item))
+        .route("/api/line-items/:item_id/recompute", post(routes::estimating::recompute_line_item))
 
         // Middleware
         .layer(TraceLayer::new_for_http())

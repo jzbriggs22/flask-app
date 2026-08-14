@@ -25,6 +25,9 @@ pub struct DrawingSheet {
     pub title: String,
     pub page_index: i32,
     pub thumbnail_url: Option<String>,
+    pub created_by: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 /// A specific version of a sheet. Measurements bind to revisions, not sheets.
@@ -95,7 +98,9 @@ pub struct TakeoffLayer {
     pub cost_code: String,
     pub visible: bool,
     pub sort_order: i32,
+    pub created_by: Uuid,
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize)]

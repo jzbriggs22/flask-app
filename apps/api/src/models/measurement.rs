@@ -49,6 +49,8 @@ pub struct Measurement {
     pub version: i32,
     pub created_by: Uuid,
     pub created_at: DateTime<Utc>,
+    /// When the materialized row last changed (version history in measurement_versions).
+    pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
 }
 
