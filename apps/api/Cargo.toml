@@ -1,0 +1,38 @@
+[package]
+name = "openbuild-api"
+version = "0.1.0"
+edition = "2021"
+description = "OpenBuild backend API server"
+
+[dependencies]
+# Web framework
+axum = { version = "0.7", features = ["multipart", "json"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace", "limit"] }
+tokio = { version = "1", features = ["full"] }
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Auth
+jsonwebtoken = "9"
+argon2 = "0.5"
+
+# Utilities
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# File storage (S3-compatible)
+aws-sdk-s3 = "1"
+aws-config = "1"
+
+# PDF processing
+# lopdf = "0.32"  # Uncomment when adding PDF processing

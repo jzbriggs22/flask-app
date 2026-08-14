@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+target/
+*.wasm
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Database
+instance/
+*.db
+*.sqlite
+
+# MinIO data
+minio-data/
+
+# Coverage
+coverage/
+htmlcov/
+
+# Rust
+apps/api/target/
+
+# Temp
+tmp/
+.tmp/
