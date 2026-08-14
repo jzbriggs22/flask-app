@@ -70,14 +70,16 @@ export function screenToWorld(
   const x = (screen.x - state.panX) / effectiveScale;
   const y = (screen.y - state.panY) / effectiveScale;
 
-  // Handle rotation: rotate the inverse direction
+  // Handle rotation: rotate the inverse direction.
+  // At 90°/270° the viewport dimensions are swapped: the viewport x-axis
+  // spans the page HEIGHT, so the inverse uses pageHeightPt (and vice versa).
   switch (state.pdfViewportRotation) {
     case 90:
-      return { x: y, y: state.pageWidthPt - x };
+      return { x: y, y: state.pageHeightPt - x };
     case 180:
       return { x: state.pageWidthPt - x, y: state.pageHeightPt - y };
     case 270:
-      return { x: state.pageHeightPt - y, y: x };
+      return { x: state.pageWidthPt - y, y: x };
     default: // 0
       return { x, y };
   }
@@ -98,10 +100,12 @@ export function worldToScreen(
   let x: number;
   let y: number;
 
-  // Handle rotation
+  // Handle rotation. For a W×H page rotated 90° CW, page corner (0,0) lands
+  // at viewport (H, 0) — the viewport x-axis spans the page HEIGHT, so the
+  // 90° case uses pageHeightPt (and the 270° case uses pageWidthPt).
   switch (state.pdfViewportRotation) {
     case 90:
-      x = state.pageWidthPt - world.y;
+      x = state.pageHeightPt - world.y;
       y = world.x;
       break;
     case 180:
@@ -110,7 +114,7 @@ export function worldToScreen(
       break;
     case 270:
       x = world.y;
-      y = state.pageHeightPt - world.x;
+      y = state.pageWidthPt - world.x;
       break;
     default: // 0
       x = world.x;

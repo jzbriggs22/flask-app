@@ -178,7 +178,7 @@ export class PdfViewer {
     const { width, height } = this.container.getBoundingClientRect();
     const dpr = this.state.transform.devicePixelRatio;
 
-    // Size canvases
+    // Size canvases (this resets each context's transform to identity)
     for (const canvas of [this.pdfCanvas, this.overlayCanvas]) {
       canvas.width = width * dpr;
       canvas.height = height * dpr;
@@ -186,9 +186,16 @@ export class PdfViewer {
       canvas.style.height = `${height}px`;
     }
 
-    // Clear
-    this.pdfCtx.clearRect(0, 0, this.pdfCanvas.width, this.pdfCanvas.height);
-    this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+    // Map drawing coordinates to CSS pixels on HiDPI displays. worldToScreen
+    // yields CSS-pixel coordinates, so without this scale everything drawn on
+    // the overlay (including by external callers via getOverlayContext) would
+    // render at 1/dpr size, misaligned with the cursor and the PDF layer.
+    this.pdfCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Clear (in CSS-pixel coordinates, post-scale)
+    this.pdfCtx.clearRect(0, 0, width, height);
+    this.overlayCtx.clearRect(0, 0, width, height);
 
     // TODO: Implement PDF page rendering pipeline
     // 1. Get current page from PDF.js document

@@ -23,7 +23,7 @@ import type {
   SnapTarget,
   SnapTargetType,
 } from "@openbuild/types";
-import { worldToScreen } from "./transforms";
+import { screenToWorld, worldToScreen } from "./transforms";
 import { midpoint, distanceBetween } from "./measurement";
 
 /**
@@ -121,16 +121,16 @@ export function findSnapTarget(
     }
   }
 
-  // Grid snapping: if no vertex/midpoint found, try grid
+  // Grid snapping: if no vertex/midpoint found, try grid.
+  // Use the shared rotation-aware inverse — an inline unrotated inverse
+  // would compute the wrong world point on rotated pages.
   if (!bestCandidate && config.snapToGrid && config.gridSpacingWorld > 0) {
-    const effectiveScale = transform.zoom * transform.pdfViewportScale;
-    const worldX = (cursorScreen.x - transform.panX) / effectiveScale;
-    const worldY = (cursorScreen.y - transform.panY) / effectiveScale;
+    const cursorWorld = screenToWorld(cursorScreen, transform);
     const spacing = config.gridSpacingWorld;
 
     const snappedWorld: WorldPoint = {
-      x: Math.round(worldX / spacing) * spacing,
-      y: Math.round(worldY / spacing) * spacing,
+      x: Math.round(cursorWorld.x / spacing) * spacing,
+      y: Math.round(cursorWorld.y / spacing) * spacing,
     };
 
     const snappedScreen = worldToScreen(snappedWorld, transform);
