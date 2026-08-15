@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Catch a Bird - BirdCatch{% endblock %}
+
+{% block content %}
+<div class="section-header">
+    <h1>Catch a Bird!</h1>
+    <p>Log a sighting to earn XP and fill your Birdex</p>
+</div>
+
+<!-- Catch Form -->
+<div class="card mb-3" id="catch-form-container">
+    <form id="catch-form">
+        <div class="form-group">
+            <label for="bird-select">Which bird did you spot?</label>
+            <select id="bird-select" required>
+                <option value="">-- Select a bird --</option>
+                <optgroup label="Legendary">
+                    {% for bird in birds if bird.rarity == 'legendary' %}
+                    <option value="{{ bird.id }}">{{ bird.common_name }}</option>
+                    {% endfor %}
+                </optgroup>
+                <optgroup label="Epic">
+                    {% for bird in birds if bird.rarity == 'epic' %}
+                    <option value="{{ bird.id }}">{{ bird.common_name }}</option>
+                    {% endfor %}
+                </optgroup>
+                <optgroup label="Rare">
+                    {% for bird in birds if bird.rarity == 'rare' %}
+                    <option value="{{ bird.id }}">{{ bird.common_name }}</option>
+                    {% endfor %}
+                </optgroup>
+                <optgroup label="Uncommon">
+                    {% for bird in birds if bird.rarity == 'uncommon' %}
+                    <option value="{{ bird.id }}">{{ bird.common_name }}</option>
+                    {% endfor %}
+                </optgroup>
+                <optgroup label="Common">
+                    {% for bird in birds if bird.rarity == 'common' %}
+                    <option value="{{ bird.id }}">{{ bird.common_name }}</option>
+                    {% endfor %}
+                </optgroup>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="location-name">Location</label>
+            <div class="flex gap-1">
+                <input type="text" id="location-name" placeholder="e.g., Central Park" style="flex:1;">
+                <button type="button" id="geo-btn" class="btn btn-secondary btn-sm">Use GPS</button>
+            </div>
+        </div>
+        <input type="hidden" id="latitude">
+        <input type="hidden" id="longitude">
+        <div class="form-group">
+            <label for="notes">Notes (optional)</label>
+            <textarea id="notes" rows="3" placeholder="What was it doing? Describe the sighting..."></textarea>
+        </div>
+        <button type="submit" class="btn btn-catch" style="width:100%;">Catch!</button>
+    </form>
+</div>
+
+<!-- Result Panel -->
+<div class="card catch-result" id="catch-result">
+    <div class="caught-banner" id="result-banner">Caught!</div>
+    <div id="result-bird-name" style="font-size:1.3rem; font-weight:700;"></div>
+    <div id="result-rarity"></div>
+    <div id="new-species-badge" class="new-species-flash" style="display:none;">NEW SPECIES!</div>
+    <div class="xp-earned" id="result-xp">+0 XP</div>
+    <div class="xp-breakdown" id="result-breakdown"></div>
+    <div id="level-up-section"></div>
+    <div id="achievements-section"></div>
+    <div class="mt-2 flex gap-1" style="justify-content:center;">
+        <button class="btn btn-catch" id="catch-another">Catch Another</button>
+        <a href="{{ url_for('pages.birdex') }}" class="btn btn-primary">View Birdex</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const form = document.getElementById("catch-form");
+    const formContainer = document.getElementById("catch-form-container");
+    const result = document.getElementById("catch-result");
+
+    // Geolocation
+    document.getElementById("geo-btn").addEventListener("click", () => {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(pos => {
+                document.getElementById("latitude").value = pos.coords.latitude;
+                document.getElementById("longitude").value = pos.coords.longitude;
+                showToast("Location captured!", "success");
+            }, () => showToast("Could not get location", "error"));
+        }
+    });
+
+    // Submit catch
+    form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const birdId = document.getElementById("bird-select").value;
+        if (!birdId) return showToast("Please select a bird", "error");
+
+        const payload = { bird_id: parseInt(birdId) };
+        const loc = document.getElementById("location-name").value;
+        const lat = document.getElementById("latitude").value;
+        const lng = document.getElementById("longitude").value;
+        const notes = document.getElementById("notes").value;
+
+        if (loc) payload.location_name = loc;
+        if (lat) payload.latitude = parseFloat(lat);
+        if (lng) payload.longitude = parseFloat(lng);
+        if (notes) payload.notes = notes;
+
+        const res = await apiFetch("/api/sightings", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            showToast(res.data.error || "Failed to log sighting", "error");
+            return;
+        }
+
+        showResult(res.data);
+    });
+
+    function showResult(data) {
+        formContainer.style.display = "none";
+        result.classList.add("visible");
+
+        const bird = data.sighting.bird;
+        document.getElementById("result-bird-name").textContent = bird.common_name;
+        document.getElementById("result-rarity").innerHTML =
+            `<span class="badge badge-${bird.rarity}">${bird.rarity}</span>`;
+
+        // New species
+        const nsBadge = document.getElementById("new-species-badge");
+        nsBadge.style.display = data.is_new_species ? "inline-block" : "none";
+
+        // XP
+        const xp = data.xp_breakdown;
+        document.getElementById("result-xp").textContent = `+${xp.total_xp} XP`;
+
+        let breakdown = `Base: ${xp.base_xp}`;
+        if (xp.new_species_bonus > 0) breakdown += ` | New Species: +${xp.new_species_bonus}`;
+        if (xp.streak_bonus > 0) breakdown += ` | Streak: +${xp.streak_bonus}`;
+        if (xp.repeat_sighting) breakdown += " | Repeat today (reduced XP)";
+        document.getElementById("result-breakdown").textContent = breakdown;
+
+        // Level up
+        const levelSection = document.getElementById("level-up-section");
+        levelSection.innerHTML = "";
+        if (data.level_up) {
+            levelSection.innerHTML = `<div class="level-up-banner">Level Up! You are now Level ${data.level_up.new_level}!</div>`;
+        }
+
+        // Achievements
+        const achSection = document.getElementById("achievements-section");
+        achSection.innerHTML = "";
+        if (data.new_achievements && data.new_achievements.length > 0) {
+            data.new_achievements.forEach(a => {
+                achSection.innerHTML += `<div class="achievement-reveal">
+                    <span style="font-size:1.5rem;">${a.icon_emoji || FALLBACK_ICON}</span>
+                    <strong>${a.name}</strong> - ${a.description}
+                </div>`;
+            });
+        }
+
+        // Completed challenges
+        if (data.completed_challenges && data.completed_challenges.length > 0) {
+            data.completed_challenges.forEach(c => {
+                achSection.innerHTML += `<div class="achievement-reveal" style="border-color:var(--color-primary);">
+                    &#127919; <strong>Quest Complete!</strong> ${c.description} (+${c.xp_reward} XP)
+                </div>`;
+            });
+        }
+    }
+
+    // Catch another
+    document.getElementById("catch-another").addEventListener("click", () => {
+        result.classList.remove("visible");
+        formContainer.style.display = "block";
+        form.reset();
+    });
+});
+</script>
+{% endblock %}

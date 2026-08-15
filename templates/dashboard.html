@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - BirdCatch{% endblock %}
+
+{% block content %}
+<div class="section-header">
+    <h1>Welcome back, {{ user.username }}!</h1>
+    <p>Level {{ user.level }} Birder</p>
+</div>
+
+<!-- Stats Row -->
+<div class="stats-row mb-3">
+    <div class="stat-card">
+        <div class="stat-value">{{ user.level }}</div>
+        <div class="stat-label">Level</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ user.xp }}</div>
+        <div class="stat-label">Total XP</div>
+        {% if next_level_xp %}
+        <div class="xp-bar-container mt-1">
+            {% set pct = ((user.xp - prev_level_xp) / (next_level_xp - prev_level_xp) * 100) if next_level_xp > prev_level_xp else 100 %}
+            <div class="xp-bar-fill" style="width: {{ pct | round(1) }}%"></div>
+        </div>
+        <div style="font-size:0.7rem; color:var(--color-text-light); margin-top:0.25rem;">
+            {{ user.xp }} / {{ next_level_xp }} XP
+        </div>
+        {% endif %}
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ user.streak_days }}</div>
+        <div class="stat-label">Day Streak</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ user.caught_birds | length }} / {{ total_birds }}</div>
+        <div class="stat-label">Species</div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="flex gap-1 mb-3" style="flex-wrap:wrap;">
+    <a href="{{ url_for('pages.catch') }}" class="btn btn-catch">Catch a Bird!</a>
+    <a href="{{ url_for('pages.explore') }}" class="btn btn-primary">Explore</a>
+    <a href="{{ url_for('pages.birdex') }}" class="btn btn-secondary">View Birdex</a>
+</div>
+
+<!-- Daily Quests -->
+{% if challenges %}
+<div class="card mb-3">
+    <div class="flex-between" style="margin-bottom:1rem;">
+        <h2>Daily Quests</h2>
+        <a href="{{ url_for('pages.challenges') }}" style="font-size:0.85rem;">View All</a>
+    </div>
+    {% for ch in challenges %}
+    <div style="padding:0.5rem 0; {{ 'border-bottom:1px solid var(--color-border);' if not loop.last else '' }}">
+        <div class="flex-between">
+            <span style="font-weight:600; {{ 'text-decoration:line-through; opacity:0.6;' if ch.completed else '' }}">
+                {% if ch.completed %}&#10003; {% endif %}{{ ch.description }}
+            </span>
+            <span style="font-size:0.8rem; color:var(--color-primary); font-weight:600;">+{{ ch.xp_reward }} XP</span>
+        </div>
+        <div class="progress-bar mt-1">
+            <div class="progress-fill" style="width:{{ (ch.current_count / ch.target_count * 100) | round(1) }}%;
+                background:{{ 'var(--color-success)' if ch.completed else 'var(--color-primary)' }};"></div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Recent Sightings -->
+<div class="card">
+    <h2 style="margin-bottom: 1rem;">Recent Sightings</h2>
+    {% if sightings %}
+    {% for s in sightings %}
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 0; border-bottom:1px solid var(--color-border);">
+        <div>
+            <span class="bird-name" style="font-weight:600;">{{ s.bird.common_name }}</span>
+            <span class="badge badge-{{ s.bird.rarity }}">{{ s.bird.rarity }}</span>
+            {% if s.is_new_species %}<span class="badge badge-uncommon">NEW!</span>{% endif %}
+            {% if s.location_name %}<br><span style="font-size:0.8rem; color:var(--color-text-light);">{{ s.location_name }}</span>{% endif %}
+        </div>
+        <div style="text-align:right;">
+            <div style="font-weight:700; color:var(--color-primary);">+{{ s.xp_earned }} XP</div>
+            <div style="font-size:0.75rem; color:var(--color-text-light);">{{ s.spotted_at.strftime('%b %d, %H:%M') }}</div>
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p style="color:var(--color-text-light);">No sightings yet. <a href="{{ url_for('pages.catch') }}">Catch your first bird!</a></p>
+    {% endif %}
+</div>
+{% endblock %}

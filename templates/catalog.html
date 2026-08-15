@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Bird Catalog - BirdCatch{% endblock %}
+
+{% block content %}
+<div class="section-header">
+    <h1>Bird Catalog</h1>
+    <p>Explore all {{ birds | length }} species available to catch</p>
+</div>
+
+<!-- Filters -->
+<div class="filters">
+    <input type="text" id="search-input" placeholder="Search birds..." style="flex:1; min-width:200px;">
+    <select id="filter-rarity">
+        <option value="">All Rarities</option>
+        <option value="common">Common</option>
+        <option value="uncommon">Uncommon</option>
+        <option value="rare">Rare</option>
+        <option value="epic">Epic</option>
+        <option value="legendary">Legendary</option>
+    </select>
+    <select id="filter-habitat">
+        <option value="">All Habitats</option>
+        <option value="urban">Urban</option>
+        <option value="forest">Forest</option>
+        <option value="wetland">Wetland</option>
+        <option value="grassland">Grassland</option>
+        <option value="coastal">Coastal</option>
+        <option value="mountain">Mountain</option>
+    </select>
+    <select id="filter-region">
+        <option value="">All Regions</option>
+        <option value="north_america">North America</option>
+        <option value="europe">Europe</option>
+        <option value="south_america">South America</option>
+        <option value="central_america">Central America</option>
+        <option value="asia">Asia</option>
+        <option value="africa">Africa</option>
+        <option value="oceania">Oceania</option>
+    </select>
+    <span class="count-display" id="bird-count">Showing {{ birds | length }} birds</span>
+</div>
+
+<!-- Bird Grid -->
+<div class="grid grid-2" id="bird-grid">
+    {% for bird in birds %}
+    <div class="bird-card"
+         data-name="{{ bird.common_name | lower }} {{ bird.scientific_name | lower }}"
+         data-rarity="{{ bird.rarity }}"
+         data-habitat="{{ bird.habitat }}"
+         data-region="{{ bird.region }}">
+        <div class="flex-between">
+            <div class="bird-name">{{ bird.common_name }}</div>
+            <span class="badge badge-{{ bird.rarity }}">{{ bird.rarity }}</span>
+        </div>
+        <div class="bird-scientific">{{ bird.scientific_name }}</div>
+        <div class="bird-desc">{{ bird.description }}</div>
+        <div class="bird-meta">
+            <span class="tag">{{ bird.habitat | capitalize }}</span>
+            <span class="tag">{{ bird.region | replace('_', ' ') | title }}</span>
+            <span class="tag">{{ bird.family }}</span>
+        </div>
+        <div class="bird-xp">+{{ bird.xp_value }} XP</div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const cards = document.querySelectorAll(".bird-card");
+    const searchInput = document.getElementById("search-input");
+    const filterRarity = document.getElementById("filter-rarity");
+    const filterHabitat = document.getElementById("filter-habitat");
+    const filterRegion = document.getElementById("filter-region");
+    const countDisplay = document.getElementById("bird-count");
+
+    function applyFilters() {
+        const search = searchInput.value.toLowerCase();
+        const rarity = filterRarity.value;
+        const habitat = filterHabitat.value;
+        const region = filterRegion.value;
+        let visible = 0;
+
+        cards.forEach(card => {
+            const matchSearch = !search || card.dataset.name.includes(search);
+            const matchRarity = !rarity || card.dataset.rarity === rarity;
+            const matchHabitat = !habitat || card.dataset.habitat === habitat;
+            const matchRegion = !region || card.dataset.region === region;
+
+            const show = matchSearch && matchRarity && matchHabitat && matchRegion;
+            card.style.display = show ? "" : "none";
+            if (show) visible++;
+        });
+
+        countDisplay.textContent = `Showing ${visible} birds`;
+    }
+
+    let debounceTimer;
+    searchInput.addEventListener("input", () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(applyFilters, 200);
+    });
+    filterRarity.addEventListener("change", applyFilters);
+    filterHabitat.addEventListener("change", applyFilters);
+    filterRegion.addEventListener("change", applyFilters);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Birdex - BirdCatch{% endblock %}
+
+{% block content %}
+<div class="section-header">
+    <h1>Your Birdex</h1>
+    <p>{{ caught_count }} / {{ total }} species discovered ({{ completion_pct }}%)</p>
+</div>
+
+<!-- Completion Bar -->
+<div class="card mb-3">
+    <div class="flex-between mb-2">
+        <strong>Collection Progress</strong>
+        <span>{{ completion_pct }}%</span>
+    </div>
+    <div class="xp-bar-container" style="height:16px;">
+        <div class="xp-bar-fill" style="width: {{ completion_pct }}%; background: linear-gradient(90deg, var(--color-success), var(--color-uncommon));"></div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="filters">
+    <button class="filter-btn active" data-show="all">All ({{ total }})</button>
+    <button class="filter-btn" data-show="caught">Caught ({{ caught_count }})</button>
+    <button class="filter-btn" data-show="uncaught">Uncaught ({{ total - caught_count }})</button>
+    <select id="birdex-rarity">
+        <option value="">All Rarities</option>
+        <option value="common">Common</option>
+        <option value="uncommon">Uncommon</option>
+        <option value="rare">Rare</option>
+        <option value="epic">Epic</option>
+        <option value="legendary">Legendary</option>
+    </select>
+</div>
+
+<!-- Birdex Grid -->
+<div class="grid grid-4" id="birdex-grid">
+    {% for entry in entries %}
+    {% if entry.caught %}
+    <div class="birdex-card caught rarity-{{ entry.bird.rarity }}"
+         data-caught="true" data-rarity="{{ entry.bird.rarity }}">
+        <span class="badge badge-{{ entry.bird.rarity }}" style="margin-bottom:0.5rem;">{{ entry.bird.rarity }}</span>
+        <div class="bird-name">{{ entry.bird.common_name }}</div>
+        <div class="times-spotted">Spotted {{ entry.times_spotted }}x</div>
+    </div>
+    {% else %}
+    <div class="birdex-card mystery"
+         data-caught="false" data-rarity="{{ entry.bird.rarity }}">
+        <div class="mystery-icon">?</div>
+        <div class="bird-name">???</div>
+        <span class="badge badge-{{ entry.bird.rarity }}" style="margin-top:0.5rem;">{{ entry.bird.rarity }}</span>
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const cards = document.querySelectorAll(".birdex-card");
+    const filterBtns = document.querySelectorAll(".filter-btn");
+    const raritySelect = document.getElementById("birdex-rarity");
+    let currentShow = "all";
+
+    function applyFilters() {
+        const rarity = raritySelect.value;
+        cards.forEach(card => {
+            const matchShow = currentShow === "all" ||
+                (currentShow === "caught" && card.dataset.caught === "true") ||
+                (currentShow === "uncaught" && card.dataset.caught === "false");
+            const matchRarity = !rarity || card.dataset.rarity === rarity;
+            card.style.display = (matchShow && matchRarity) ? "" : "none";
+        });
+    }
+
+    filterBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+            filterBtns.forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            currentShow = btn.dataset.show;
+            applyFilters();
+        });
+    });
+
+    raritySelect.addEventListener("change", applyFilters);
+});
+</script>
+{% endblock %}

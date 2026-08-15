@@ -1,0 +1,8 @@
+# Runtime
+Flask>=3.0,<4.0
+Flask-SQLAlchemy>=3.1,<4.0
+SQLAlchemy>=2.0,<3.0
+Werkzeug>=3.0,<4.0
+
+# Test / development
+pytest>=8.0,<10.0

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Leaderboard - BirdCatch{% endblock %}
+
+{% block content %}
+<div class="section-header">
+    <h1>Leaderboard</h1>
+    <p>Top birders ranked by experience</p>
+</div>
+
+<!-- Sort Options -->
+<div class="filters mb-3">
+    <button class="filter-btn active" data-sort="xp">XP</button>
+    <button class="filter-btn" data-sort="level">Level</button>
+    <button class="filter-btn" data-sort="total_sightings">Sightings</button>
+    <button class="filter-btn" data-sort="streak">Streak</button>
+</div>
+
+<!-- Rankings Table -->
+<table class="leaderboard-table" id="leaderboard-table">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Birder</th>
+            <th>Level</th>
+            <th>XP</th>
+            <th>Sightings</th>
+            <th>Species</th>
+            <th>Streak</th>
+        </tr>
+    </thead>
+    <tbody id="leaderboard-body">
+        {% for user in users %}
+        <tr class="{{ 'current-user' if session.get('user_id') == user.id else '' }}">
+            <td class="{{ 'rank-1' if loop.index == 1 else 'rank-2' if loop.index == 2 else 'rank-3' if loop.index == 3 else '' }}">
+                {{ loop.index }}
+            </td>
+            <td><strong>{{ user.username }}</strong></td>
+            <td>{{ user.level }}</td>
+            <td>{{ user.xp }}</td>
+            <td>{{ user.total_sightings }}</td>
+            <td>{{ user.caught_birds | length }}</td>
+            <td>{{ user.streak_days }}d</td>
+        </tr>
+        {% endfor %}
+        {% if not users %}
+        <tr><td colspan="7" style="text-align:center; color:var(--color-text-light);">No birders yet. Be the first!</td></tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const filterBtns = document.querySelectorAll(".filter-btn");
+    const tbody = document.getElementById("leaderboard-body");
+    const currentUserId = document.body.dataset.userId;
+
+    filterBtns.forEach(btn => {
+        btn.addEventListener("click", async () => {
+            filterBtns.forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+
+            const res = await apiFetch(`/api/leaderboard?sort=${btn.dataset.sort}&limit=50`);
+            if (!res.ok) return;
+
+            tbody.innerHTML = res.data.leaderboard.map((user, i) => {
+                const rank = i + 1;
+                const rankClass = rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : "";
+                const rowClass = (currentUserId && user.id == currentUserId) ? "current-user" : "";
+                return `<tr class="${rowClass}">
+                    <td class="${rankClass}">${rank}</td>
+                    <td><strong>${escapeHtml(user.username)}</strong></td>
+                    <td>${Number(user.level)}</td>
+                    <td>${Number(user.xp)}</td>
+                    <td>${Number(user.total_sightings)}</td>
+                    <td>${Number(user.unique_species)}</td>
+                    <td>${Number(user.streak_days)}d</td>
+                </tr>`;
+            }).join("");
+        });
+    });
+});
+</script>
+{% endblock %}

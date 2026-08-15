@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}BirdCatch{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body data-user-id="{{ session.get('user_id', '') }}" data-username="{{ session.get('username', '') }}">
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="{{ url_for('pages.landing') }}" class="nav-brand">BirdCatch</a>
+            <button class="nav-toggle" aria-label="Toggle menu">&#9776;</button>
+            <div class="nav-links">
+                {% if session.get('user_id') %}
+                <a href="{{ url_for('pages.dashboard') }}">Dashboard</a>
+                <a href="{{ url_for('pages.explore') }}">Explore</a>
+                <a href="{{ url_for('pages.catch') }}">Catch</a>
+                <a href="{{ url_for('pages.challenges') }}">Quests</a>
+                <a href="{{ url_for('pages.birdex') }}">Birdex</a>
+                <a href="{{ url_for('pages.achievements') }}">Badges</a>
+                <a href="{{ url_for('pages.feed') }}">Feed</a>
+                <a href="{{ url_for('pages.leaderboard') }}">Leaderboard</a>
+                <span class="nav-user">{{ session.get('username') }}</span>
+                <button class="btn btn-sm btn-secondary" id="logout-btn">Logout</button>
+                {% else %}
+                <a href="{{ url_for('pages.catalog') }}">Catalog</a>
+                <a href="{{ url_for('pages.feed') }}">Feed</a>
+                <a href="{{ url_for('pages.leaderboard') }}">Leaderboard</a>
+                <a href="{{ url_for('pages.landing') }}" class="btn btn-sm btn-primary">Login</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <div id="toast-container"></div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

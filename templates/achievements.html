@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Achievements - BirdCatch{% endblock %}
+
+{% block content %}
+<div class="section-header">
+    <h1>Achievements</h1>
+    <p>{{ entries | selectattr('earned') | list | length }} / {{ entries | length }} unlocked</p>
+</div>
+
+<!-- Category Filters -->
+<div class="filters">
+    <button class="filter-btn active" data-cat="all">All</button>
+    <button class="filter-btn" data-cat="collection">Collection</button>
+    <button class="filter-btn" data-cat="streak">Streak</button>
+    <button class="filter-btn" data-cat="mastery">Mastery</button>
+</div>
+
+<!-- Achievement Grid -->
+<div class="grid grid-3" id="ach-grid">
+    {% for entry in entries %}
+    <div class="achievement-card {{ 'earned' if entry.earned else 'locked' }}"
+         data-category="{{ entry.achievement.category }}">
+        <div class="ach-icon">{{ entry.achievement.icon_emoji }}</div>
+        <div class="ach-name">{{ entry.achievement.name }}</div>
+        <div class="ach-desc">{{ entry.achievement.description }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    // Category filter
+    const cards = document.querySelectorAll(".achievement-card");
+    const filterBtns = document.querySelectorAll(".filter-btn");
+
+    filterBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+            filterBtns.forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            const cat = btn.dataset.cat;
+            cards.forEach(card => {
+                card.style.display = (cat === "all" || card.dataset.category === cat) ? "" : "none";
+            });
+        });
+    });
+});
+</script>
+{% endblock %}

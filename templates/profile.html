@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ profile_user.username }} - BirdCatch{% endblock %}
+
+{% block content %}
+<div class="card mb-3">
+    <div style="display:flex; align-items:center; gap:1.5rem; flex-wrap:wrap;">
+        <div style="width:80px; height:80px; border-radius:50%; background:linear-gradient(135deg, var(--color-primary), #7C3AED); display:flex; align-items:center; justify-content:center; color:white; font-size:2rem; font-weight:800;">
+            {{ profile_user.username[0] | upper }}
+        </div>
+        <div style="flex:1;">
+            <h1 style="margin-bottom:0.25rem;">{{ profile_user.username }}</h1>
+            <p style="color:var(--color-text-light);">Level {{ profile_user.level }} Birder</p>
+            <p style="font-size:0.8rem; color:var(--color-text-light);">
+                Joined {{ profile_user.created_at.strftime('%B %Y') if profile_user.created_at else 'recently' }}
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-row mb-3">
+    <div class="stat-card">
+        <div class="stat-value">{{ profile_user.level }}</div>
+        <div class="stat-label">Level</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ profile_user.xp }}</div>
+        <div class="stat-label">XP</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ caught_count }} / {{ total_birds }}</div>
+        <div class="stat-label">Species</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ profile_user.total_sightings }}</div>
+        <div class="stat-label">Sightings</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ profile_user.streak_days }}</div>
+        <div class="stat-label">Day Streak</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ profile_user.achievements | length }}</div>
+        <div class="stat-label">Badges</div>
+    </div>
+</div>
+
+<!-- Achievements -->
+{% if profile_user.achievements %}
+<div class="card mb-3">
+    <h2 style="margin-bottom:1rem;">Achievements</h2>
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+        {% for ach in profile_user.achievements %}
+        <span class="badge badge-uncommon" style="font-size:0.85rem; padding:0.3rem 0.75rem;">
+            {{ ach.icon_emoji }} {{ ach.name }}
+        </span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Recent Sightings -->
+<div class="card">
+    <h2 style="margin-bottom:1rem;">Recent Sightings</h2>
+    {% if sightings %}
+    {% for s in sightings %}
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 0; border-bottom:1px solid var(--color-border);">
+        <div>
+            <strong>{{ s.bird.common_name }}</strong>
+            <span class="badge badge-{{ s.bird.rarity }}">{{ s.bird.rarity }}</span>
+            {% if s.is_new_species %}<span class="badge badge-uncommon">NEW!</span>{% endif %}
+            {% if s.location_name %}<br><span style="font-size:0.8rem; color:var(--color-text-light);">{{ s.location_name }}</span>{% endif %}
+        </div>
+        <div style="text-align:right;">
+            <div style="font-weight:700; color:var(--color-primary);">+{{ s.xp_earned }} XP</div>
+            <div style="font-size:0.75rem; color:var(--color-text-light);">{{ s.spotted_at.strftime('%b %d, %H:%M') }}</div>
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p style="color:var(--color-text-light);">No sightings yet.</p>
+    {% endif %}
+</div>
+{% endblock %}

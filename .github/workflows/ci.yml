@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyflakes
+
+      - name: Lint (unused imports / undefined names)
+        run: python -m pyflakes app.py wsgi.py models.py seed_data.py routes/ tests/
+
+      - name: Run tests
+        run: python -m pytest tests/ -v
+
+      - name: Verify tests never touch the real database
+        run: |
+          test ! -f instance/birding.db || {
+            echo "::error::Test run created instance/birding.db; tests must stay in-memory"
+            exit 1
+          }
