@@ -1,17 +1,46 @@
 // ===== Shared Utilities =====
 
+// Escape a string for safe interpolation into innerHTML.
+function escapeHtml(value) {
+    return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+// URLs where a 401 is an expected outcome (bad credentials), NOT a session
+// expiry, so the caller should render the error instead of being redirected.
+const AUTH_ENDPOINTS = ["/api/login", "/api/register"];
+
 async function apiFetch(url, options = {}) {
     const defaults = {
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
     };
     const config = { ...defaults, ...options, headers: { ...defaults.headers, ...options.headers } };
 
-    const response = await fetch(url, config);
-    const data = await response.json();
+    let response;
+    try {
+        response = await fetch(url, config);
+    } catch (err) {
+        showToast("Network error. Please check your connection and try again.", "error");
+        return { ok: false, status: 0, data: { error: "Network error" } };
+    }
 
-    if (response.status === 401) {
+    // A session that expired mid-session should bounce to the landing page, but
+    // a 401 from the login/register forms is a real error the form must display.
+    const isAuthEndpoint = AUTH_ENDPOINTS.some(e => url.startsWith(e));
+    if (response.status === 401 && !isAuthEndpoint) {
         window.location.href = "/";
         return null;
+    }
+
+    let data = null;
+    try {
+        data = await response.json();
+    } catch (err) {
+        data = { error: "Unexpected server response" };
     }
 
     return { ok: response.ok, status: response.status, data };

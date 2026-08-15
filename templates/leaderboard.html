@@ -70,12 +70,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 const rowClass = (currentUserId && user.id == currentUserId) ? "current-user" : "";
                 return `<tr class="${rowClass}">
                     <td class="${rankClass}">${rank}</td>
-                    <td><strong>${user.username}</strong></td>
-                    <td>${user.level}</td>
-                    <td>${user.xp}</td>
-                    <td>${user.total_sightings}</td>
-                    <td>${user.unique_species}</td>
-                    <td>${user.streak_days}d</td>
+                    <td><strong>${escapeHtml(user.username)}</strong></td>
+                    <td>${Number(user.level)}</td>
+                    <td>${Number(user.xp)}</td>
+                    <td>${Number(user.total_sightings)}</td>
+                    <td>${Number(user.unique_species)}</td>
+                    <td>${Number(user.streak_days)}d</td>
                 </tr>`;
             }).join("");
         });

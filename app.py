@@ -1,4 +1,5 @@
 import os
+import warnings
 from flask import Flask, jsonify
 from models import db, Bird, Achievement, RARITY_XP
 from seed_data import BIRDS, ACHIEVEMENTS
@@ -7,12 +8,48 @@ from routes import (
     challenges_bp, encounter_bp, pages_bp,
 )
 
+_DEV_SECRET = "dev-secret-key-change-in-production"
 
-def create_app():
+
+def _resolve_secret_key(test_config):
+    """Return a secret key, refusing to boot with the dev fallback in production.
+
+    Precedence: explicit test_config > SECRET_KEY env var > dev fallback.
+    The dev fallback is refused when FLASK_ENV=production so a misconfigured
+    deployment fails loudly instead of silently signing cookies with a public key.
+    """
+    if test_config and test_config.get("SECRET_KEY"):
+        return test_config["SECRET_KEY"]
+    env_secret = os.environ.get("SECRET_KEY")
+    if env_secret:
+        return env_secret
+    if os.environ.get("FLASK_ENV", "").lower() == "production":
+        raise RuntimeError(
+            "SECRET_KEY environment variable must be set in production. "
+            "Refusing to start with the insecure development fallback."
+        )
+    warnings.warn(
+        "SECRET_KEY not set; using the insecure development fallback. "
+        "Set SECRET_KEY (and FLASK_ENV=production) before deploying.",
+        stacklevel=2,
+    )
+    return _DEV_SECRET
+
+
+def create_app(test_config=None):
     app = Flask(__name__)
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///birding.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-    app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
+    app.config["SECRET_KEY"] = _resolve_secret_key(test_config)
+    # Harden session cookies (Secure is enabled outside debug/testing).
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+    if test_config:
+        app.config.update(test_config)
+
+    if not (app.debug or app.testing):
+        app.config["SESSION_COOKIE_SECURE"] = True
 
     db.init_app(app)
 
@@ -103,7 +140,6 @@ def seed_database():
     print(f"Seeded {len(BIRDS)} birds and {len(ACHIEVEMENTS)} achievements.")
 
 
-app = create_app()
-
 if __name__ == "__main__":
+    app = create_app()
     app.run(debug=True)

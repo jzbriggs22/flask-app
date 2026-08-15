@@ -1,7 +1,10 @@
 from flask import Blueprint, request, jsonify, session
-from models import db, User, Bird, Sighting, RARITY_XP, user_sightings
+from models import db, User, Bird, Sighting, RARITY_XP
+from routes.auth import login_required, current_user
 
 sightings_bp = Blueprint("sightings", __name__)
+
+MAX_PER_PAGE = 100
 
 
 def check_achievements(user):
@@ -46,27 +49,42 @@ def check_achievements(user):
 
 
 @sightings_bp.route("/sightings", methods=["POST"])
+@login_required
 def log_sighting():
     """
     Log a bird sighting -- the core 'catch' mechanic.
     Awards XP, updates streaks, checks for new species, and triggers achievements.
+
+    The acting user is always taken from the authenticated session; any user_id
+    in the request body is ignored so one account cannot act as another.
     """
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
 
-    user_id = data.get("user_id") or session.get("user_id")
-    if not user_id or "bird_id" not in data:
-        return jsonify({"error": "bird_id is required (user_id from session or body)"}), 400
-
-    user = User.query.get(user_id)
+    user = current_user()
     if not user:
-        return jsonify({"error": "User not found"}), 404
+        return jsonify({"error": "Authentication required"}), 401
 
-    bird = Bird.query.get(data["bird_id"])
+    bird_id = data.get("bird_id")
+    if not isinstance(bird_id, int):
+        return jsonify({"error": "bird_id is required and must be an integer"}), 400
+
+    lat = data.get("latitude")
+    lng = data.get("longitude")
+    if lat is not None and not isinstance(lat, (int, float)):
+        return jsonify({"error": "latitude must be a number"}), 400
+    if lng is not None and not isinstance(lng, (int, float)):
+        return jsonify({"error": "longitude must be a number"}), 400
+
+    bird = Bird.query.get(bird_id)
     if not bird:
         return jsonify({"error": "Bird not found"}), 404
 
     # Check if this is a new species for the user
     is_new = bird not in user.caught_birds
+
+    # Update the streak first so the bonus reflects today's (post-update) streak.
+    old_level = user.level
+    user.update_streak()
 
     # Calculate XP
     base_xp = RARITY_XP.get(bird.rarity, 10)
@@ -78,8 +96,8 @@ def log_sighting():
     sighting = Sighting(
         user_id=user.id,
         bird_id=bird.id,
-        latitude=data.get("latitude"),
-        longitude=data.get("longitude"),
+        latitude=lat,
+        longitude=lng,
         location_name=data.get("location_name"),
         notes=data.get("notes"),
         photo_url=data.get("photo_url"),
@@ -92,18 +110,18 @@ def log_sighting():
     if is_new:
         user.caught_birds.append(bird)
     user.total_sightings += 1
-    old_level = user.level
-    user.update_streak()
-    new_level = user.add_xp(total_xp)
+    user.add_xp(total_xp)
 
-    leveled_up = new_level > old_level
-
-    # Check achievements
-    newly_earned = check_achievements(user)
-
-    # Update daily challenges
+    # Apply daily-challenge rewards BEFORE computing level-up and achievements so
+    # that a level (or level-based achievement) crossed by challenge XP is reported.
     from routes.challenges import update_challenges_for_sighting
     completed_challenges = update_challenges_for_sighting(user, bird, is_new)
+
+    new_level = user.level
+    leveled_up = new_level > old_level
+
+    # Check achievements after all XP (sighting + challenge) has been applied.
+    newly_earned = check_achievements(user)
 
     db.session.commit()
 
@@ -136,11 +154,20 @@ def log_sighting():
 
 
 @sightings_bp.route("/sightings/user/<int:user_id>", methods=["GET"])
+@login_required
 def get_user_sightings(user_id):
-    """Get all sightings for a user, most recent first."""
+    """Get all sightings for the authenticated user, most recent first.
+
+    A user may only read their own sightings; the response includes precise GPS
+    coordinates, so cross-user access is forbidden.
+    """
+    if session.get("user_id") != user_id:
+        return jsonify({"error": "Forbidden"}), 403
+
     user = User.query.get_or_404(user_id)
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 20, type=int)
+    per_page = max(1, min(per_page, MAX_PER_PAGE))
 
     pagination = user.sightings.order_by(
         Sighting.spotted_at.desc()
@@ -155,7 +182,10 @@ def get_user_sightings(user_id):
 
 
 @sightings_bp.route("/sightings/<int:sighting_id>", methods=["GET"])
+@login_required
 def get_sighting(sighting_id):
-    """Get details for a specific sighting."""
+    """Get details for a specific sighting (owner only, since it exposes GPS)."""
     sighting = Sighting.query.get_or_404(sighting_id)
+    if sighting.user_id != session.get("user_id"):
+        return jsonify({"error": "Forbidden"}), 403
     return jsonify(sighting.to_dict()), 200

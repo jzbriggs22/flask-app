@@ -1,7 +1,6 @@
-from datetime import datetime, timezone
 from flask import Blueprint, render_template, session, redirect, url_for
-from models import db, User, Bird, Sighting, Achievement, DailyChallenge, LEVEL_THRESHOLDS
-from routes.auth import login_required
+from models import User, Bird, Sighting, Achievement, LEVEL_THRESHOLDS
+from routes.auth import login_required, current_user
 from routes.challenges import generate_daily_challenges
 
 pages_bp = Blueprint("pages", __name__)
@@ -17,7 +16,9 @@ def landing():
 @pages_bp.route("/dashboard")
 @login_required
 def dashboard():
-    user = User.query.get(session["user_id"])
+    user = current_user()
+    if not user:
+        return redirect(url_for("pages.landing"))
     recent_sightings = user.sightings.order_by(Sighting.spotted_at.desc()).limit(5).all()
     next_level_xp = LEVEL_THRESHOLDS[user.level] if user.level < len(LEVEL_THRESHOLDS) else None
     prev_level_xp = LEVEL_THRESHOLDS[user.level - 1] if user.level > 0 else 0
@@ -49,7 +50,9 @@ def catch():
 @pages_bp.route("/birdex")
 @login_required
 def birdex():
-    user = User.query.get(session["user_id"])
+    user = current_user()
+    if not user:
+        return redirect(url_for("pages.landing"))
     caught_ids = {b.id for b in user.caught_birds}
     all_birds = Bird.query.order_by(Bird.common_name).all()
 
@@ -79,7 +82,9 @@ def birdex():
 @pages_bp.route("/achievements")
 @login_required
 def achievements():
-    user = User.query.get(session["user_id"])
+    user = current_user()
+    if not user:
+        return redirect(url_for("pages.landing"))
     earned_ids = {a.id for a in user.achievements}
     all_achievements = Achievement.query.all()
 
@@ -105,7 +110,9 @@ def explore():
 @pages_bp.route("/challenges")
 @login_required
 def challenges():
-    user = User.query.get(session["user_id"])
+    user = current_user()
+    if not user:
+        return redirect(url_for("pages.landing"))
     today_challenges = generate_daily_challenges(user)
     return render_template("challenges.html", challenges=today_challenges, user=user)
 

@@ -77,7 +77,7 @@ ACHIEVEMENTS = [
     {"name": "Species Starter", "description": "Spot 5 different species", "icon": "seedling", "category": "collection", "requirement_type": "unique_species", "requirement_value": 5},
     {"name": "Growing Collection", "description": "Spot 15 different species", "icon": "herb", "category": "collection", "requirement_type": "unique_species", "requirement_value": 15},
     {"name": "Birdex Builder", "description": "Spot 30 different species", "icon": "book", "category": "collection", "requirement_type": "unique_species", "requirement_value": 30},
-    {"name": "Avian Scholar", "description": "Spot 50 different species", "icon": "mortar_board", "category": "collection", "requirement_type": "unique_species", "requirement_value": 50},
+    {"name": "Avian Scholar", "description": "Spot 45 different species", "icon": "mortar_board", "category": "collection", "requirement_type": "unique_species", "requirement_value": 45},
 
     # Streak milestones
     {"name": "Getting Started", "description": "Maintain a 3-day birding streak", "icon": "fire", "category": "streak", "requirement_type": "streak", "requirement_value": 3},
