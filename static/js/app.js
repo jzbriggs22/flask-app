@@ -14,11 +14,23 @@ function escapeHtml(value) {
 // expiry, so the caller should render the error instead of being redirected.
 const AUTH_ENDPOINTS = ["/api/login", "/api/register"];
 
+function getCookie(name) {
+    const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+    return match ? decodeURIComponent(match[2]) : null;
+}
+
 async function apiFetch(url, options = {}) {
     const defaults = {
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
     };
     const config = { ...defaults, ...options, headers: { ...defaults.headers, ...options.headers } };
+
+    // Echo the CSRF token back on state-changing requests (double-submit).
+    const method = (config.method || "GET").toUpperCase();
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+        const csrf = getCookie("csrf_token");
+        if (csrf) config.headers["X-CSRF-Token"] = csrf;
+    }
 
     let response;
     try {
@@ -55,17 +67,9 @@ function showToast(message, type = "info") {
     setTimeout(() => toast.remove(), 4000);
 }
 
-const ICON_MAP = {
-    egg: "\u{1F95A}", eyes: "\u{1F440}", binoculars: "\u{1F52D}", star: "\u{2B50}",
-    crown: "\u{1F451}", seedling: "\u{1F331}", herb: "\u{1F33F}", book: "\u{1F4D6}",
-    mortar_board: "\u{1F393}", fire: "\u{1F525}", mag: "\u{1F50D}", gem: "\u{1F48E}",
-    dizzy: "\u{1F4AB}", trophy: "\u{1F3C6}", bird: "\u{1F426}", eagle: "\u{1F985}",
-    rocket: "\u{1F680}", "100": "\u{1F4AF}",
-};
-
-function getEmoji(iconName) {
-    return ICON_MAP[iconName] || "\u{1F3C5}";
-}
+// Achievement icons are resolved server-side and delivered as `icon_emoji`
+// (see models.ICON_EMOJI), so there is no icon map duplicated in the client.
+const FALLBACK_ICON = "\u{1F3C5}";
 
 // ===== Navbar Toggle =====
 document.addEventListener("DOMContentLoaded", () => {

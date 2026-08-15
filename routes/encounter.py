@@ -1,6 +1,7 @@
 import random
 from flask import Blueprint, request, jsonify, session
-from models import db, User, Bird, Sighting
+
+from models import User, Bird
 
 encounter_bp = Blueprint("encounter", __name__)
 

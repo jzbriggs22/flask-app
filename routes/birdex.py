@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+
 from models import db, User, Bird, Sighting
 
 birdex_bp = Blueprint("birdex", __name__)
@@ -29,6 +30,18 @@ def get_birdex(user_id):
 
     all_birds = query.order_by(Bird.common_name).all()
 
+    # Per-bird sighting stats in two aggregate queries instead of two per
+    # caught bird (previously ~100 queries for a full collection).
+    stats_rows = db.session.query(
+        Sighting.bird_id,
+        db.func.count(Sighting.id),
+        db.func.min(Sighting.spotted_at),
+    ).filter(Sighting.user_id == user.id).group_by(Sighting.bird_id).all()
+    stats_by_bird = {
+        bird_id: {"times_spotted": count, "first_spotted": first}
+        for bird_id, count, first in stats_rows
+    }
+
     birdex_entries = []
     for bird in all_birds:
         is_caught = bird.id in caught_ids
@@ -45,15 +58,10 @@ def get_birdex(user_id):
         if is_caught:
             # Show full details for caught birds
             entry.update(bird.to_dict())
-            # Add sighting stats
-            sighting_count = Sighting.query.filter_by(
-                user_id=user.id, bird_id=bird.id
-            ).count()
-            first_sighting = Sighting.query.filter_by(
-                user_id=user.id, bird_id=bird.id
-            ).order_by(Sighting.spotted_at.asc()).first()
-            entry["times_spotted"] = sighting_count
-            entry["first_spotted"] = first_sighting.spotted_at.isoformat() if first_sighting else None
+            stats = stats_by_bird.get(bird.id, {})
+            first = stats.get("first_spotted")
+            entry["times_spotted"] = stats.get("times_spotted", 0)
+            entry["first_spotted"] = first.isoformat() if first else None
         else:
             # Mystery entry -- just show silhouette info
             entry["common_name"] = "???"
@@ -63,8 +71,10 @@ def get_birdex(user_id):
 
         birdex_entries.append(entry)
 
+    # Summary stats describe the whole (filtered) collection and must not
+    # depend on the `show` display filter, which only hides entries.
     total = len(all_birds)
-    caught_count = sum(1 for e in birdex_entries if e["caught"])
+    caught_count = sum(1 for bird in all_birds if bird.id in caught_ids)
 
     return jsonify({
         "user_id": user.id,

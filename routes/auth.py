@@ -1,7 +1,9 @@
 from functools import wraps
-from flask import Blueprint, request, jsonify, session, redirect, url_for
 
-from models import db, User
+from flask import Blueprint, request, jsonify, session, redirect, url_for
+from sqlalchemy.exc import IntegrityError
+
+from models import db, User, DEFAULT_TIMEZONE, is_valid_timezone
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -62,20 +64,51 @@ def register():
     if len(password) < PASSWORD_MIN:
         return jsonify({"error": f"password must be at least {PASSWORD_MIN} characters"}), 400
 
+    tzname = data.get("timezone")
+    if tzname is not None and not is_valid_timezone(tzname):
+        return jsonify({"error": "timezone must be a valid IANA timezone name"}), 400
+
     if User.query.filter_by(username=username).first():
         return jsonify({"error": "Username already taken"}), 409
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already registered"}), 409
 
-    user = User(username=username, email=email)
+    user = User(username=username, email=email, timezone=tzname or DEFAULT_TIMEZONE)
     user.set_password(password)
     db.session.add(user)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # A concurrent registration claimed this username/email between the
+        # check above and the insert; report the conflict instead of a 500.
+        db.session.rollback()
+        return jsonify({"error": "Username or email already registered"}), 409
 
     session["user_id"] = user.id
     session["username"] = user.username
 
     return jsonify({"message": "Registration successful", "user": user.to_dict()}), 201
+
+
+@auth_bp.route("/profile/timezone", methods=["PUT"])
+@login_required
+def set_timezone():
+    """Set the caller's timezone, which drives streak and daily-quest rollover."""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "Authentication required"}), 401
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "A JSON object with a timezone is required"}), 400
+
+    tzname = data.get("timezone")
+    if not is_valid_timezone(tzname):
+        return jsonify({"error": "timezone must be a valid IANA timezone name"}), 400
+
+    user.timezone = tzname
+    db.session.commit()
+    return jsonify({"message": "Timezone updated", "user": user.to_dict()}), 200
 
 
 @auth_bp.route("/login", methods=["POST"])

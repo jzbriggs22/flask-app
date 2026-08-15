@@ -1,6 +1,12 @@
+import hmac
 import os
+import secrets
 import warnings
-from flask import Flask, jsonify
+
+from flask import Flask, jsonify, request, session
+from sqlalchemy.exc import IntegrityError
+from werkzeug.exceptions import HTTPException
+
 from models import db, Bird, Achievement, RARITY_XP
 from seed_data import BIRDS, ACHIEVEMENTS
 from routes import (
@@ -76,6 +82,7 @@ def create_app(test_config=None):
                     "POST /api/register": "Create a new account",
                     "POST /api/login": "Log in",
                     "GET /api/profile/<user_id>": "View user profile",
+                    "PUT /api/profile/timezone": "Set your timezone (drives daily rollover)",
                 },
                 "birds": {
                     "GET /api/birds": "Browse all birds (filter by rarity, habitat, region, search)",
@@ -89,22 +96,94 @@ def create_app(test_config=None):
                     "GET /api/sightings/user/<user_id>": "User's sighting history",
                     "GET /api/sightings/<id>": "Sighting details",
                 },
+                "challenges": {
+                    "GET /api/challenges": "Today's daily quests",
+                },
+                "encounter": {
+                    "GET /api/encounter": "A weighted random bird encounter",
+                    "GET /api/encounter/batch": "Several encounters at once",
+                },
                 "birdex": {
                     "GET /api/birdex/<user_id>": "User's Birdex collection (filter: rarity, habitat, show=all|caught|uncaught)",
                     "GET /api/birdex/<user_id>/stats": "Collection stats by rarity/habitat/region",
                 },
                 "leaderboard": {
-                    "GET /api/leaderboard": "Global rankings (sort: xp, level, total_sightings, streak)",
+                    "GET /api/leaderboard": "Global rankings (sort: xp, level, total_sightings, unique_species, streak)",
                     "GET /api/leaderboard/user/<user_id>": "User's rank",
                 },
             },
         })
+
+    _register_csrf(app)
+    _register_error_handlers(app)
 
     with app.app_context():
         db.create_all()
         seed_database()
 
     return app
+
+
+CSRF_METHODS = ("POST", "PUT", "PATCH", "DELETE")
+CSRF_COOKIE = "csrf_token"
+CSRF_HEADER = "X-CSRF-Token"
+
+
+def _register_csrf(app):
+    """Double-submit CSRF protection for authenticated, state-changing API calls.
+
+    The token lives in the signed session and is mirrored into a JS-readable
+    cookie. Requests without a session are exempt: there is no authenticated
+    context to abuse, and login/register must work for a fresh client.
+    """
+
+    @app.before_request
+    def _csrf_protect():
+        if request.method not in CSRF_METHODS:
+            return None
+        if not request.path.startswith("/api/"):
+            return None
+        if session.get("user_id") is None:
+            return None
+        expected = session.get("csrf_token")
+        provided = request.headers.get(CSRF_HEADER, "")
+        if not expected or not hmac.compare_digest(expected, provided):
+            return jsonify({"error": "Invalid or missing CSRF token"}), 403
+        return None
+
+    @app.after_request
+    def _issue_csrf_cookie(response):
+        token = session.get("csrf_token")
+        if not token:
+            token = secrets.token_urlsafe(32)
+            session["csrf_token"] = token
+        if request.cookies.get(CSRF_COOKIE) != token:
+            response.set_cookie(
+                CSRF_COOKIE,
+                token,
+                httponly=False,  # the frontend must read this to echo it back
+                samesite="Lax",
+                secure=app.config.get("SESSION_COOKIE_SECURE", False),
+            )
+        return response
+
+
+def _register_error_handlers(app):
+    """Return JSON (not Werkzeug HTML) for errors on API routes."""
+
+    @app.errorhandler(HTTPException)
+    def _handle_http_exception(err):
+        if not request.path.startswith("/api/"):
+            return err
+        return jsonify({"error": err.description, "status": err.code}), err.code
+
+    @app.errorhandler(Exception)
+    def _handle_unexpected(err):
+        app.logger.exception("Unhandled error on %s", request.path)
+        db.session.rollback()
+        if not request.path.startswith("/api/"):
+            raise err
+        return jsonify({"error": "Internal server error", "status": 500}), 500
 
 
 def seed_database():
@@ -136,7 +215,12 @@ def seed_database():
         )
         db.session.add(achievement)
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Another worker seeded first during a concurrent boot; theirs stands.
+        db.session.rollback()
+        return
     print(f"Seeded {len(BIRDS)} birds and {len(ACHIEVEMENTS)} achievements.")
 
 

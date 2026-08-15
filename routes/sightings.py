@@ -1,5 +1,11 @@
+from datetime import datetime, time, timedelta, timezone
+
 from flask import Blueprint, request, jsonify, session
-from models import db, User, Bird, Sighting, RARITY_XP
+from sqlalchemy.exc import IntegrityError
+
+from models import (
+    db, User, Bird, Sighting, RARITY_XP, MAX_STREAK_BONUS, REPEAT_XP_FACTOR,
+)
 from routes.auth import login_required, current_user
 
 sightings_bp = Blueprint("sightings", __name__)
@@ -48,6 +54,34 @@ def check_achievements(user):
     return newly_earned
 
 
+def _local_day_bounds_utc(user):
+    """The user's current local calendar day, expressed as naive-UTC bounds.
+
+    spotted_at is persisted as naive UTC, so the local-midnight boundaries are
+    converted to UTC before they are used in a query.
+    """
+    tz = user.tzinfo()
+    start_local = datetime.combine(user.today(), time.min, tzinfo=tz)
+    end_local = start_local + timedelta(days=1)
+    return (
+        start_local.astimezone(timezone.utc).replace(tzinfo=None),
+        end_local.astimezone(timezone.utc).replace(tzinfo=None),
+    )
+
+
+def _already_logged_today(user, bird):
+    """True if the user already logged this species during their local day."""
+    start_utc, end_utc = _local_day_bounds_utc(user)
+    return db.session.query(
+        Sighting.query.filter(
+            Sighting.user_id == user.id,
+            Sighting.bird_id == bird.id,
+            Sighting.spotted_at >= start_utc,
+            Sighting.spotted_at < end_utc,
+        ).exists()
+    ).scalar()
+
+
 @sightings_bp.route("/sightings", methods=["POST"])
 @login_required
 def log_sighting():
@@ -86,10 +120,17 @@ def log_sighting():
     old_level = user.level
     user.update_streak()
 
-    # Calculate XP
-    base_xp = RARITY_XP.get(bird.rarity, 10)
+    # Has this species already been logged today? Repeats still count toward
+    # quests, but earn reduced XP so the leaderboard is not a clicking contest.
+    is_repeat_today = _already_logged_today(user, bird)
+
+    # Calculate XP. The bird's own xp_value is authoritative (it is what the
+    # catalog and encounter screens advertise); RARITY_XP is only a fallback.
+    base_xp = bird.xp_value or RARITY_XP.get(bird.rarity, 10)
     bonus_xp = base_xp if is_new else 0  # Double XP for new species
-    streak_bonus = min(user.streak_days * 2, 50)  # Up to 50 bonus XP for streaks
+    streak_bonus = 0 if is_repeat_today else min(user.streak_days * 2, MAX_STREAK_BONUS)
+    if is_repeat_today:
+        base_xp = max(1, int(base_xp * REPEAT_XP_FACTOR))
     total_xp = base_xp + bonus_xp + streak_bonus
 
     # Create sighting record
@@ -123,7 +164,15 @@ def log_sighting():
     # Check achievements after all XP (sighting + challenge) has been applied.
     newly_earned = check_achievements(user)
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # A concurrent request logged this same new species first; the whole
+        # transaction rolls back, so report a conflict instead of a 500.
+        db.session.rollback()
+        return jsonify({
+            "error": "That sighting conflicted with a simultaneous request. Please retry."
+        }), 409
 
     response = {
         "sighting": sighting.to_dict(),
@@ -131,6 +180,7 @@ def log_sighting():
             "base_xp": base_xp,
             "new_species_bonus": bonus_xp,
             "streak_bonus": streak_bonus,
+            "repeat_sighting": is_repeat_today,
             "total_xp": total_xp,
         },
         "is_new_species": is_new,

@@ -20,7 +20,7 @@
     {% for entry in entries %}
     <div class="achievement-card {{ 'earned' if entry.earned else 'locked' }}"
          data-category="{{ entry.achievement.category }}">
-        <div class="ach-icon">{{ entry.achievement.icon }}</div>
+        <div class="ach-icon">{{ entry.achievement.icon_emoji }}</div>
         <div class="ach-name">{{ entry.achievement.name }}</div>
         <div class="ach-desc">{{ entry.achievement.description }}</div>
     </div>
@@ -31,20 +31,6 @@
 {% block scripts %}
 <script>
 document.addEventListener("DOMContentLoaded", () => {
-    const ICON_MAP = {
-        egg: "\u{1F95A}", eyes: "\u{1F440}", binoculars: "\u{1F52D}", star: "\u{2B50}",
-        crown: "\u{1F451}", seedling: "\u{1F331}", herb: "\u{1F33F}", book: "\u{1F4D6}",
-        mortar_board: "\u{1F393}", fire: "\u{1F525}", mag: "\u{1F50D}", gem: "\u{1F48E}",
-        dizzy: "\u{1F4AB}", trophy: "\u{1F3C6}", bird: "\u{1F426}", eagle: "\u{1F985}",
-        rocket: "\u{1F680}", "100": "\u{1F4AF}",
-    };
-
-    // Convert icon text to emoji
-    document.querySelectorAll(".ach-icon").forEach(el => {
-        const key = el.textContent.trim();
-        el.textContent = ICON_MAP[key] || "\u{1F3C5}";
-    });
-
     // Category filter
     const cards = document.querySelectorAll(".achievement-card");
     const filterBtns = document.querySelectorAll(".filter-btn");

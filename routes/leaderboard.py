@@ -1,7 +1,12 @@
 from flask import Blueprint, request, jsonify
-from models import db, User
+
+from models import db, User, user_sightings
 
 leaderboard_bp = Blueprint("leaderboard", __name__)
+
+DEFAULT_LIMIT = 20
+MAX_LIMIT = 100
+VALID_SORTS = ("xp", "level", "total_sightings", "unique_species", "streak")
 
 
 @leaderboard_bp.route("/leaderboard", methods=["GET"])
@@ -9,20 +14,37 @@ def get_leaderboard():
     """
     Get the global leaderboard.
     Supports sorting by: xp (default), level, total_sightings, unique_species, streak.
+    An unrecognized sort is rejected rather than silently falling back to xp.
     """
     sort_by = request.args.get("sort", "xp")
-    limit = request.args.get("limit", 20, type=int)
+    if sort_by not in VALID_SORTS:
+        return jsonify({
+            "error": f"Invalid sort '{sort_by}'. Valid options: {', '.join(VALID_SORTS)}"
+        }), 400
 
-    if sort_by == "xp":
-        users = User.query.order_by(User.xp.desc()).limit(limit).all()
-    elif sort_by == "level":
-        users = User.query.order_by(User.level.desc(), User.xp.desc()).limit(limit).all()
-    elif sort_by == "total_sightings":
-        users = User.query.order_by(User.total_sightings.desc()).limit(limit).all()
-    elif sort_by == "streak":
-        users = User.query.order_by(User.streak_days.desc()).limit(limit).all()
+    limit = request.args.get("limit", DEFAULT_LIMIT, type=int) or DEFAULT_LIMIT
+    limit = max(1, min(limit, MAX_LIMIT))
+
+    if sort_by == "unique_species":
+        # Rank by distinct caught species, counted in SQL.
+        species_count = db.func.count(user_sightings.c.bird_id)
+        rows = (
+            db.session.query(User, species_count.label("species"))
+            .outerjoin(user_sightings, user_sightings.c.user_id == User.id)
+            .group_by(User.id)
+            .order_by(species_count.desc(), User.xp.desc())
+            .limit(limit)
+            .all()
+        )
+        users = [row[0] for row in rows]
     else:
-        users = User.query.order_by(User.xp.desc()).limit(limit).all()
+        order = {
+            "xp": (User.xp.desc(),),
+            "level": (User.level.desc(), User.xp.desc()),
+            "total_sightings": (User.total_sightings.desc(),),
+            "streak": (User.streak_days.desc(),),
+        }[sort_by]
+        users = User.query.order_by(*order).limit(limit).all()
 
     leaderboard = []
     for rank, user in enumerate(users, 1):
@@ -32,6 +54,7 @@ def get_leaderboard():
 
     return jsonify({
         "sort_by": sort_by,
+        "limit": limit,
         "leaderboard": leaderboard,
     }), 200
 
